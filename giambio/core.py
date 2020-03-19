@@ -35,7 +35,7 @@ class Task:
         return self.coroutine.send(None)
 
     def __repr__(self):
-        return f"<giambio.core.Task({self.coroutine}, {self.status})"
+        return f"<giambio.core.Task({self.coroutine}, {self.status}, {self.joined})"
 
 class EventLoop:
 
@@ -48,7 +48,7 @@ class EventLoop:
         self.to_run = deque()  # Scheduled tasks
         self.paused = deque()  # Paused or sleeping tasks
         self.selector = DefaultSelector()  # Selector object to perform I/O multiplexing
-        self.running = None  # This will always point to the currently running coroutine object
+        self.running = None  # This will always point to the currently running coroutine (Task object)
         self.waitlist = defaultdict(list)  # Tasks that want to join
 
     @sync_only
@@ -75,15 +75,9 @@ class EventLoop:
                     if self.running.joined:
                         exceptions[self.running] = has_raised  # Errored? Save the exception
                     else:  # If the task is not joined, the exception would disappear, but not in giambio
-                        print("Traceback (most recent call last):")
-                        traceback.print_tb(has_raised.__traceback__)
-                        ename = type(has_raised).__name__
-                        if str(has_raised):
-                            print(f"{ename}: {has_raised}")
-                        else:
-                            print(has_raised)
                         raise GiambioError from has_raised
                     self.to_run.extend(self.waitlist.pop(self.running, ()))
+
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
@@ -104,7 +98,7 @@ class EventLoop:
         self.selector.register(sock, EVENT_READ, self.running)
 
     def want_write(self, sock: socket.socket):
-        """Handler for the 'want_read' event, performs the needed operations to write into the passed socket
+        """Handler for the 'want_write' event, performs the needed operations to write into the passed socket
         asynchronously"""
 
         self.selector.register(sock, EVENT_WRITE, self.running)
@@ -143,6 +137,7 @@ class AsyncSocket(object):
 
     def __init__(self, sock: socket.socket, loop: EventLoop):
         self.sock = sock
+        self.sock.setblocking(False)
         self.loop = loop
 
     async def receive(self, max_size: int):
