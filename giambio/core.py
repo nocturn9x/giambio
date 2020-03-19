@@ -27,9 +27,15 @@ class Task:
 
     def __init__(self, coroutine: types.coroutine):
         self.coroutine = coroutine
+        self.status = False  # Not ran yet
+        self.joined = False
 
     def run(self):
+        self.status = True
         return self.coroutine.send(None)
+
+    def __repr__(self):
+        return f"<giambio.core.Task({self.coroutine}, {self.status})"
 
 class EventLoop:
 
@@ -37,6 +43,8 @@ class EventLoop:
     to allow a concurrency model"""
 
     def __init__(self):
+        """Object constructor"""
+
         self.to_run = deque()  # Scheduled tasks
         self.paused = deque()  # Paused or sleeping tasks
         self.selector = DefaultSelector()  # Selector object to perform I/O multiplexing
@@ -46,13 +54,14 @@ class EventLoop:
     @sync_only
     def loop(self):
         """Main event loop for giambio"""
+
         while True:
             if not self.selector.get_map() and not self.to_run:
                 break
             while self.selector.get_map():   # If there are sockets ready, schedule their associated task
                 tasks = deque(self.selector.select())
                 for key, _ in tasks:
-                    self.to_run.append(Task(key.data))  # Socket ready? Schedule the task
+                    self.to_run.append(key.data)  # Socket ready? Schedule the task
                     self.selector.unregister(key.fileobj)  # Once scheduled, the task does not need to wait anymore
             while self.to_run:
                 self.running = self.to_run.popleft()  # Sets the currently running task
@@ -62,13 +71,26 @@ class EventLoop:
                 except StopIteration as e:
                     return_values[self.running] = e.args[0] if e.args else None  # Saves the return value
                     self.to_run.extend(self.waitlist.pop(self.running, ()))  # Reschedules the parent task
-                except Exception as error:
-                    exceptions[self.running] = error  # Errored? Save the exception
+                except Exception as has_raised:
+                    if self.running.joined:
+                        exceptions[self.running] = has_raised  # Errored? Save the exception
+                    else:  # If the task is not joined, the exception would disappear, but not in giambio
+                        print("Traceback (most recent call last):")
+                        traceback.print_tb(has_raised.__traceback__)
+                        ename = type(has_raised).__name__
+                        if str(has_raised):
+                            print(f"{ename}: {has_raised}")
+                        else:
+                            print(has_raised)
+                        raise GiambioError from has_raised
                     self.to_run.extend(self.waitlist.pop(self.running, ()))
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
-        self.to_run.append(coroutine)
+
+        task = Task(coroutine)
+        self.to_run.append(task)
+        return task
 
     @sync_only
     def start(self, coroutine: types.coroutine, *args, **kwargs):
@@ -107,6 +129,13 @@ class EventLoop:
     async def close_sock(self, sock):
         await want_write(sock)
         return sock.close()
+
+    def want_join(self, coro):
+        if coro not in self.waitlist:
+            self.waitlist[coro].append(self.running)
+        else:
+            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+
 
 
 class AsyncSocket(object):
@@ -147,22 +176,15 @@ class AsyncSocket(object):
         return f"AsyncSocket({self.sock}, {self.loop})"
 
 
-@types.coroutine
+@types.coroutine  # TODO: Add support for this function
 def sleep(seconds: int):
     """Pause the execution of a coroutine for the passed amount of seconds,
     without blocking the entire event loop, which keeps watching for other events"""
 
+    yield "want_sleep", seconds
     start = datetime.datetime.now()
     end = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-
     return (yield end) - start  # Return how much time did the coroutine actually wait
-
-
-@types.coroutine
-def want_join(coroutine: types.coroutine):
-    """'Tells' the event loop that there is some coroutine that needs to be waited for completion"""
-
-    yield "want_join", coroutine
 
 
 @types.coroutine
@@ -183,6 +205,7 @@ def want_write(sock: socket.socket):
 def join(task: Task):
     """'Tells' the scheduler that the desired task MUST be awaited for completion"""
 
+    task.joined = True
     yield "want_join", task
     has_raised = exceptions.pop(task, None)
     if has_raised:
