@@ -17,14 +17,13 @@ async def make_srv(address: tuple):
     sock.listen(5)
     asock = loop.wrap_socket(sock)
     logging.info(f"Echo server serving asynchronously at {address}")
+    logging.info("Sleeping for 2 secs")
+    await giambio.sleep(2)
+    logging.info("Done!")
     while True:
         conn, addr = await asock.accept()
         logging.info(f"{addr} connected")
-        task = loop.spawn(echo_server(conn, addr))
-#        try:
- #           await giambio.join(task)
-  #      except Exception as e:
-   #         print(repr(e))
+        loop.spawn(echo_server(conn, addr))
 
 
 async def echo_server(sock: AsyncSocket, addr: tuple):
