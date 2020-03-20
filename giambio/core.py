@@ -27,7 +27,7 @@ class Task:
         return self.coroutine.send(None)
 
     def __repr__(self):
-        return f"<giambio.core.Task({self.coroutine}, {self.status}, {self.joined})"
+        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.ret_val}, {self.exception}, {self.cancelled})"
 
     async def cancel(self):
         return await cancel(self)
