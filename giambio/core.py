@@ -29,6 +29,12 @@ class Task:
     def __repr__(self):
         return f"<giambio.core.Task({self.coroutine}, {self.status}, {self.joined})"
 
+    async def cancel(self):
+        return await cancel(self)
+
+    async def join(self):
+        return await join(self)
+
 
 class EventLoop:
 
