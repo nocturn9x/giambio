@@ -50,6 +50,7 @@ class EventLoop:
         self.running = None  # This will always point to the currently running coroutine (Task object)
         self.joined = defaultdict(list)  # Tasks that want to join
         self.clock = default_timer  # Monotonic clock to keep track of elapsed time
+        self.tree = set()   # Keep track of coroutines to know their state
 
     def loop(self):
         """Main event loop for giambio"""
@@ -76,6 +77,10 @@ class EventLoop:
                 except StopIteration as e:
                     self.running.ret_value = e.args[0] if e.args else None  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
+                except CancelledError:
+                    self.tree.discard(self.running)
+                    self.running.cancelled = True  # Update the coroutine status
+                    raise
                 except Exception as has_raised:
                     if self.running.joined:
                         self.running.exception = has_raised  # Errored? Save the exception
@@ -223,6 +228,6 @@ def join(task: Task):
 
 @types.coroutine
 def cancel(task: Task):
-    task.cancelled = True
     yield "want_cancel", task
+    assert task.cancelled
 
