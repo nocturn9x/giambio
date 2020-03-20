@@ -146,6 +146,10 @@ class EventLoop:
     def want_cancel(self, task):
         task.coroutine.throw(CancelledError)
 
+    async def connect_sock(self, sock: socket.socket, addr: tuple):
+        await want_write(sock)
+        return sock.connect(addr)
+
 
 class AsyncSocket(object):
     """Abstraction layer for asynchronous sockets"""
@@ -175,6 +179,12 @@ class AsyncSocket(object):
         """Closes the socket asynchronously"""
 
         await self.loop.close_sock(self.sock)
+
+    async def connect(self, addr: tuple):
+        """Connects the socket to an endpoint"""
+
+        await self.loop.connect_sock(self.sock, addr)
+
 
     def __enter__(self):
         return self.sock.__enter__()
