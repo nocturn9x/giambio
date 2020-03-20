@@ -4,7 +4,7 @@ from collections import deque, defaultdict
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from heapq import heappush, heappop
 import socket
-from .exceptions import GiambioError, AlreadyJoinedError
+from .exceptions import GiambioError, AlreadyJoinedError, CancelledError
 import traceback
 from timeit import default_timer
 from time import sleep as wait
@@ -20,6 +20,7 @@ class Task:
         self.joined = False
         self.ret_val = None # Return value is saved here
         self.exception = None  # If errored, the exception is saved here
+        self.cancelled = False # When cancelled, this is True
 
     def run(self):
         self.status = True
@@ -131,6 +132,9 @@ class EventLoop:
     def want_sleep(self, seconds):
         heappush(self.paused, (self.clock() + seconds, self.running))
 
+    def want_cancel(self, task):
+        task.coroutine.throw(CancelledError)
+
 
 class AsyncSocket(object):
     """Abstraction layer for asynchronous sockets"""
@@ -211,5 +215,8 @@ def join(task: Task):
     return task.ret_val
 
 
-
+@types.coroutine
+def cancel(task: Task):
+    task.cancelled = True
+    yield "want_cancel", task
 

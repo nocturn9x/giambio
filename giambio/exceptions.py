@@ -5,3 +5,7 @@ class GiambioError(Exception):
 
 class AlreadyJoinedError(GiambioError):
     pass
+
+
+class CancelledError(GiambioError):
+    """Exception raised as a result of the giambio.core.cancel() method"""

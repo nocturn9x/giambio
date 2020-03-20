@@ -42,7 +42,4 @@ async def echo_server(sock: AsyncSocket, addr: tuple):
     logging.info(f"Connection from {addr} closed")
 
 
-try:
-    loop.start(make_srv, ('', 1500))
-except giambio.exceptions.GiambioError as error:
-    print(f"Error: {error}")
+loop.start(make_srv, ('', 1500))
