@@ -8,17 +8,6 @@ import socket
 from .exceptions import GiambioError, AlreadyJoinedError
 import traceback
 
-return_values = {}  # Saves the return values from coroutines
-exceptions = {}     # Saves exceptions from errored coroutines
-
-
-def sync_only(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if iscoroutine(2):
-            raise RuntimeError(f"Function '{func.__name__}' MUST be called from a synchronous context!")
-        return func(*args, **kwargs)
-    return wrapper
 
 
 class Task:
@@ -54,7 +43,6 @@ class EventLoop:
         self.running = None  # This will always point to the currently running coroutine (Task object)
         self.waitlist = defaultdict(list)  # Tasks that want to join
 
-    @sync_only
     def loop(self):
         """Main event loop for giambio"""
 
@@ -88,7 +76,6 @@ class EventLoop:
         self.to_run.append(task)
         return task
 
-    @sync_only
     def start(self, coroutine: types.coroutine, *args, **kwargs):
         self.spawn(coroutine(*args, **kwargs))
         self.loop()
