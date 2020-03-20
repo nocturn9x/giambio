@@ -7,7 +7,7 @@ from .exceptions import AlreadyJoinedError, CancelledError
 import traceback
 from timeit import default_timer
 from time import sleep as wait
-
+from .socket import AsyncSocket
 
 
 class EventLoop:
@@ -47,7 +47,7 @@ class EventLoop:
                 try:
                     method, *args = self.running.run()  # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
-                except StopIteration as e:
+                except StopIteration as e:   # TODO: Fix this return mechanism, it looks like the return value of the child task gets "replaced" by None at some point
                     self.running.ret_value = e.args[0] if e.args else None  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except CancelledError:
@@ -158,7 +158,7 @@ def sleep(seconds: int):
 
 
 @types.coroutine
-def want_read(sock: socket.socket):
+def want_read(sock: socket.socket):   # TODO: Fix this and make it work also when tasks are not joined
     """'Tells' the event loop that there is some coroutine that wants to read from the passed socket"""
 
     yield "want_read", sock

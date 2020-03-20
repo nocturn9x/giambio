@@ -5,14 +5,13 @@ Basic abstraction layer for giambio asynchronous sockets
 """
 
 
-from .core import EventLoop
 import socket
 
 
 class AsyncSocket(object):
     """Abstraction layer for asynchronous sockets"""
 
-    def __init__(self, sock: socket.socket, loop: EventLoop):
+    def __init__(self, sock: socket.socket, loop):
         self.sock = sock
         self.sock.setblocking(False)
         self.loop = loop

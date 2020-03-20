@@ -3,6 +3,19 @@ import giambio
 
 loop = giambio.EventLoop()
 
+"""
+
+What works and what does not
+
+- Run tasks concurrently: V
+- Join mechanism: V
+- Sleep mechanism: V
+- Cancellation mechanism: V
+- Exception propagation: V
+- Concurrent I/O: X   Note: I/O would work only when a task is joined (weird)
+- Return values of coroutines: X     Note: Return values ARE actually stored in task objects properly, but are messed up later when joining tasks
+
+"""
 
 async def countdown(n):
     while n > 0:
