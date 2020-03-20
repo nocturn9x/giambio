@@ -24,6 +24,7 @@ class EventLoop:
         self.running = None  # This will always point to the currently running coroutine (Task object)
         self.joined = defaultdict(list)  # Tasks that want to join
         self.clock = default_timer  # Monotonic clock to keep track of elapsed time
+        self.sequence = 0  # To avoid TypeError in the (unlikely) event of two task with the same deadline we use a unique and incremental integer pushed to the queue together with the deadline and the function itself
 
     def loop(self):
         """Main event loop for giambio"""
@@ -41,7 +42,7 @@ class EventLoop:
                 if not self.to_run:
                     wait(max(0.0, self.paused[0][0] - self.clock()))  # If there are no tasks ready, just do nothing
                 while self.paused and self.paused[0][0] < self.clock():  # Reschedules task when their timer has elapsed
-                    _, coro = heappop(self.paused)
+                    _, __, coro = heappop(self.paused)
                     self.to_run.append(coro)
                 self.running = self.to_run.popleft()  # Sets the currently running task
                 try:
@@ -113,7 +114,8 @@ class EventLoop:
             raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
     def want_sleep(self, seconds):
-        heappush(self.paused, (self.clock() + seconds, self.running))
+        self.sequence += 1   # Make this specific sleeping task unique to avoid error when comparing identical deadlines
+        heappush(self.paused, (self.clock() + seconds, self.sequence, self.running))
 
     def want_cancel(self, task):
         task.coroutine.throw(CancelledError)
