@@ -5,7 +5,7 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from inspect import iscoroutine
 from functools import wraps
 import socket
-from .exceptions import GiambioError
+from .exceptions import GiambioError, AlreadyJoinedError
 import traceback
 
 return_values = {}  # Saves the return values from coroutines
@@ -29,6 +29,8 @@ class Task:
         self.coroutine = coroutine
         self.status = False  # Not ran yet
         self.joined = False
+        self.ret_val = None # Return value is saved here
+        self.exception = None  # If errored, the exception is saved here
 
     def run(self):
         self.status = True
@@ -36,6 +38,7 @@ class Task:
 
     def __repr__(self):
         return f"<giambio.core.Task({self.coroutine}, {self.status}, {self.joined})"
+
 
 class EventLoop:
 
@@ -69,15 +72,14 @@ class EventLoop:
                     meth, *args = self.running.run()  # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, meth)(*args)
                 except StopIteration as e:
-                    return_values[self.running] = e.args[0] if e.args else None  # Saves the return value
+                    self.running.ret_value = e.args[0] if e.args else None  # Saves the return value
                     self.to_run.extend(self.waitlist.pop(self.running, ()))  # Reschedules the parent task
                 except Exception as has_raised:
                     if self.running.joined:
-                        exceptions[self.running] = has_raised  # Errored? Save the exception
+                        self.running.exception = has_raised  # Errored? Save the exception
                     else:  # If the task is not joined, the exception would disappear, but not in giambio
                         raise GiambioError from has_raised
                     self.to_run.extend(self.waitlist.pop(self.running, ()))
-
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
@@ -129,7 +131,6 @@ class EventLoop:
             self.waitlist[coro].append(self.running)
         else:
             raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
-
 
 
 class AsyncSocket(object):
@@ -202,17 +203,16 @@ def join(task: Task):
 
     task.joined = True
     yield "want_join", task
-    has_raised = exceptions.pop(task, None)
-    if has_raised:
+    if task.exception:
         print("Traceback (most recent call last):")
-        traceback.print_tb(has_raised.__traceback__)
-        ename = type(has_raised).__name__
-        if str(has_raised):
-            print(f"{ename}: {has_raised}")
+        traceback.print_tb(task.exception.__traceback__)
+        ename = type(task.exception).__name__
+        if str(task.exception):
+            print(f"{ename}: {task.exception}")
         else:
-            print(has_raised)
-        raise GiambioError from has_raised
-    return return_values.pop(task, None)
+            print(task.exception)
+        raise GiambioError from task.exception
+    return task.ret_val
 
 
 
