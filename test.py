@@ -1,9 +1,9 @@
 import giambio
-from giambio.core import AsyncSocket
+from giambio.socket import AsyncSocket
 import socket
 import logging
 
-loop = giambio.EventLoop()
+loop = giambio.core.EventLoop()
 
 logging.basicConfig(level=20,
                     format="[%(levelname)s] %(asctime)s %(message)s",

@@ -7,33 +7,7 @@ from .exceptions import AlreadyJoinedError, CancelledError
 import traceback
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket
 
-
-class Task:
-
-    """A simple wrapper around a coroutine object"""
-
-    def __init__(self, coroutine: types.coroutine):
-        self.coroutine = coroutine
-        self.status = False  # Not ran yet
-        self.joined = False
-        self.ret_val = None # Return value is saved here
-        self.exception = None  # If errored, the exception is saved here
-        self.cancelled = False # When cancelled, this is True
-
-    def run(self):
-        self.status = True
-        return self.coroutine.send(None)
-
-    def __repr__(self):
-        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.ret_val}, {self.exception}, {self.cancelled})"
-
-    async def cancel(self):
-        return await cancel(self)
-
-    async def join(self):
-        return await join(self)
 
 
 class EventLoop:
@@ -147,6 +121,32 @@ class EventLoop:
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         await want_write(sock)
         return sock.connect(addr)
+
+
+class Task:
+
+    """A simple wrapper around a coroutine object"""
+
+    def __init__(self, coroutine: types.coroutine):
+        self.coroutine = coroutine
+        self.status = False  # Not ran yet
+        self.joined = False
+        self.ret_val = None # Return value is saved here
+        self.exception = None  # If errored, the exception is saved here
+        self.cancelled = False # When cancelled, this is True
+
+    def run(self):
+        self.status = True
+        return self.coroutine.send(None)
+
+    def __repr__(self):
+        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.ret_val}, {self.exception}, {self.cancelled})"
+
+    async def cancel(self):
+        return await cancel(self)
+
+    async def join(self):
+        return await join(self)
 
 
 @types.coroutine
