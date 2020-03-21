@@ -21,7 +21,7 @@ async def make_srv(address: tuple):
     await giambio.sleep(2)
     logging.info("Done!")
     while True:
-        conn, addr = await asock.accept()
+        conn, addr = await asock.accept()  # TODO: Figure out why this I/O operation actually works while other don't
         logging.info(f"{addr} connected")
         task = loop.spawn(echo_server(conn, addr))
 #        await task.cancel()   # Cancel task!

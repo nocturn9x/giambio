@@ -51,3 +51,6 @@ class AsyncSocket(object):
 
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
+
+    def __getitem__(self, item):
+        return self.sock.__getitem__(item)

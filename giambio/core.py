@@ -79,6 +79,8 @@ class EventLoop:
         return task
 
     def start(self, coroutine: types.coroutine, *args, **kwargs):
+        """Starts the eventloop"""
+
         self.spawn(coroutine(*args, **kwargs))
         self.loop()
 
@@ -95,6 +97,8 @@ class EventLoop:
         self.selector.register(sock, EVENT_WRITE, self.running)
 
     def wrap_socket(self, sock):
+        """Wraps a standard socket into an AsyncSocket"""
+
         return AsyncSocket(sock, self)
 
     async def read_sock(self, sock: socket.socket, buffer: int):
