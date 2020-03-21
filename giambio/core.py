@@ -51,9 +51,8 @@ class EventLoop:
                 except StopIteration as e:   # TODO: Fix this return mechanism, it looks like the return value of the child task gets "replaced" by None at some point
                     self.running.ret_value = e.args[0] if e.args else None  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
-                except CancelledError:
-                    self.running.cancelled = True  # Update the coroutine status
-                    raise      # TODO: Fix this, removing this raises RuntimeError: cannot reuse already awaited coroutine
+                except RuntimeError:
+                    self.running.cancelled = True
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                     if self.running.joined:    # Let the join function handle the hassle of propagating the error
