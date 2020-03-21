@@ -24,7 +24,7 @@ async def make_srv(address: tuple):
         conn, addr = await asock.accept()
         logging.info(f"{addr} connected")
         task = loop.spawn(echo_server(conn, addr))
-        await task.cancel()
+#        await task.cancel()   # Cancel task!
 
 
 async def echo_server(sock: AsyncSocket, addr: tuple):
@@ -43,4 +43,4 @@ async def echo_server(sock: AsyncSocket, addr: tuple):
     logging.info(f"Connection from {addr} closed")
 
 
-loop.start(make_srv, ('', 1500))
+loop.start(make_srv, ('', 1501))

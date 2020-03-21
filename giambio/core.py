@@ -30,7 +30,7 @@ class EventLoop:
         """Main event loop for giambio"""
 
         while True:
-            if not self.selector.get_map() and not self.to_run:
+            if not self.selector.get_map() and not any((self.to_run + deque(self.paused))):
                 break
             while self.selector.get_map():   # If there are sockets ready, (re)schedule their associated task
                 timeout = 0.0 if self.to_run else None
@@ -68,6 +68,14 @@ class EventLoop:
 
         task = Task(coroutine)
         self.to_run.append(task)
+        return task
+
+    def schedule(self, coroutine: types.coroutine, when: int):
+        """Schedules a task for execution after n seconds"""
+
+        self.sequence += 1
+        task = Task(coroutine)
+        heappush(self.paused, (self.clock() + when, self.sequence, task))
         return task
 
     def start(self, coroutine: types.coroutine, *args, **kwargs):
