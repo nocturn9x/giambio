@@ -48,7 +48,7 @@ class EventLoop:
                 try:
                     method, *args = self.running.run()  # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
-                except StopIteration as e:   # TODO: Fix this return mechanism, it looks like the return value of the child task gets "replaced" by None at some point
+                except StopIteration as e:
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except Exception as has_raised:
@@ -58,7 +58,7 @@ class EventLoop:
                     else:  # Let the exception propagate (I'm looking at you asyncIO ;))
                         raise
                 except KeyboardInterrupt:
-                    self.running.coroutine.throw(KeyboardInterrupt)
+                    self.running.throw(KeyboardInterrupt)
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
@@ -161,10 +161,7 @@ class Task:
 
     def run(self):
         self.status = True
-        try:
-            return self.coroutine.send(None)
-        except RuntimeError:
-            print(self.loop.to_run)
+        return self.coroutine.send(None)
 
     def __repr__(self):
         return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.result})"

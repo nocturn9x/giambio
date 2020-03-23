@@ -42,8 +42,8 @@ async def main():
     task = loop.spawn(countdown(8))
     task1 = loop.schedule(count(8, 2), 2)
     result = await task.join()
-#    result1 = await task1.join()   # Joining a scheduled task does not reschedule the parent task
-    print(result, result1)
+    result1 = await task1.join()   # Joining a scheduled task does not reschedule the parent task
+    print(f"countdown returned: {result}\ncount returned: {result1}")
     print("All done")
 
 loop.start(main)
