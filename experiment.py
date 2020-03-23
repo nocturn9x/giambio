@@ -40,11 +40,12 @@ async def count(stop, step=1):
 async def main():
     print("Spawning countdown immediately, scheduling count for 2 secs from now")
     task = loop.spawn(countdown(8))
-    task1 = loop.schedule(count(8, 2), 2)
-    await giambio.sleep(2)  # Wait before cancelling
-#    await task.cancel()  # Cancel the task
+    task1 = loop.spawn(count(8, 2))
+    await giambio.sleep(2)
+    await task.cancel()
     result = await task1.join()   # Joining multiple tasks still causes problems
-#    result1 = await task.join()
+    result1 = await task.join()
+    print(result, result1)
     print("All done")
 
 loop.start(main)

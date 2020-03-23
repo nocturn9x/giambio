@@ -49,16 +49,12 @@ class EventLoop:
                     method, *args = self.running.run()  # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
                 except StopIteration as e:   # TODO: Fix this return mechanism, it looks like the return value of the child task gets "replaced" by None at some point
-                    self.running.ret_value = e.args[0] if e.args else None  # Saves the return value
+                    self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
-                except RuntimeError:
-                    self.running.cancelled = True
-                    self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
-                    print(self.to_run)
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                     if self.running.joined:    # Let the join function handle the hassle of propagating the error
-                        self.running.exception = has_raised  # Save the exception
+                        self.running.result = Result(None, has_raised)  # Save the exception
                     else:  # Let the exception propagate (I'm looking at you asyncIO ;))
                         raise
                 except KeyboardInterrupt:
@@ -67,11 +63,11 @@ class EventLoop:
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
 
-        task = Task(coroutine)
+        task = Task(coroutine, self)
         self.to_run.append(task)
         return task
 
-    def schedule(self, coroutine: types.coroutine, when: int):
+    def schedule(self, coroutine: types.coroutine, when: int):   # TODO: Fix this
         """Schedules a task for execution after n seconds"""
 
         self.sequence += 1
@@ -131,37 +127,63 @@ class EventLoop:
         heappush(self.paused, (self.clock() + seconds, self.sequence, self.running))
 
     def want_cancel(self, task):
-        task.coroutine.throw(CancelledError)
+        self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
+        task.cancelled = True
+        task.throw(CancelledError())
+
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         await want_write(sock)
         return sock.connect(addr)
 
 
+class Result:
+    """A wrapper for results of coroutines"""
+
+    def __init__(self, val=None, exc: Exception = None):
+        self.val = val
+        self.exc = exc
+
+    def __repr__(self):
+        return f"giambio.core.Result({self.val}, {self.exc})"
+
+
 class Task:
 
     """A simple wrapper around a coroutine object"""
 
-    def __init__(self, coroutine: types.coroutine):
+    def __init__(self, coroutine: types.coroutine, loop: EventLoop):
         self.coroutine = coroutine
         self.status = False  # Not ran yet
         self.joined = False
-        self.ret_val = None # Return value is saved here
-        self.exception = None  # If errored, the exception is saved here
-        self.cancelled = False # When cancelled, this is True
+        self.result = None   # Updated when the coroutine execution ends
+        self.loop = loop  # The EventLoop object that spawned the task
 
     def run(self):
         self.status = True
-        return self.coroutine.send(None)
+        try:
+            return self.coroutine.send(None)
+        except RuntimeError:
+            print(self.loop.to_run)
 
     def __repr__(self):
-        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.ret_val}, {self.exception}, {self.cancelled})"
+        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.result})"
+
+    def throw(self, exception: Exception):
+        return self.coroutine.throw(exception)
 
     async def cancel(self):
         return await cancel(self)
 
     async def join(self):
         return await join(self)
+
+    def get_result(self):
+        if self.result:
+            if self.result.exc:
+                raise self.result.exc
+            else:
+                return self.result.val
 
 
 @types.coroutine
@@ -192,20 +214,9 @@ def join(task: Task):
 
     task.joined = True
     yield "want_join", task
-    if task.exception:
-        print("Traceback (most recent call last):")
-        traceback.print_tb(task.exception.__traceback__)
-        exception_name = type(task.exception).__name__
-        if str(task.exception):
-            print(f"{exception_name}: {task.exception}")
-        else:
-            print(task.exception)
-        raise task.exception
-    return task.ret_val
+    return task.get_result()
 
 
 @types.coroutine
 def cancel(task: Task):
     yield "want_cancel", task
-    assert task.cancelled
-
