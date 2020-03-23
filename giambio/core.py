@@ -52,6 +52,7 @@ class EventLoop:
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except RuntimeError:
+                    self.to_run.extend(self.joined.pop(self.running, ()))
                     self.to_run.append(self.running)
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task

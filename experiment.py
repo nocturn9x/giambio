@@ -1,18 +1,19 @@
 import giambio
+
 loop = giambio.EventLoop()
 
 """
 
-What works and what does not (21st March 2020 11:22 AM)
+What works and what does not (23rd March 2020 22:38 PM)
 
 - Run tasks concurrently: V
 - Join mechanism: V
 - Sleep mechanism: V
-- Cancellation mechanism: V
+- Cancellation mechanism: X  Note: Figure out how to rescheule parent task
 - Exception propagation: V
 - Concurrent I/O: X   Note: I/O would work only when a task is joined (weird)
 - Return values of coroutines: V
-- Scheduling tasks for future execution: X
+- Scheduling tasks for future execution: V
 
 """
 
