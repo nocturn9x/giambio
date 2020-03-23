@@ -4,7 +4,6 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from heapq import heappush, heappop
 import socket
 from .exceptions import AlreadyJoinedError, CancelledError
-import traceback
 from timeit import default_timer
 from time import sleep as wait
 from .socket import AsyncSocket
@@ -32,9 +31,9 @@ class EventLoop:
         while True:
             if not self.selector.get_map() and not any((self.to_run + deque(self.paused))):
                 break
-            while self.selector.get_map():   # If there are sockets ready, (re)schedule their associated task
+            while not self.to_run:  # If there are sockets ready, (re)schedule their associated task
                 timeout = 0.0 if self.to_run else None
-                tasks = deque(self.selector.select(timeout))
+                tasks = self.selector.select(timeout)
                 for key, _ in tasks:
                     self.to_run.append(key.data)  # Socket ready? Schedule the task
                     self.selector.unregister(key.fileobj)  # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)

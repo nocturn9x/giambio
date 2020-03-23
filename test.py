@@ -3,6 +3,7 @@ from giambio.socket import AsyncSocket
 import socket
 import logging
 
+
 loop = giambio.core.EventLoop()
 
 logging.basicConfig(level=20,
@@ -17,19 +18,14 @@ async def make_srv(address: tuple):
     sock.listen(5)
     asock = loop.wrap_socket(sock)
     logging.info(f"Echo server serving asynchronously at {address}")
-    logging.info("Sleeping for 2 secs")
-    await giambio.sleep(2)
-    logging.info("Done!")
     while True:
-        conn, addr = await asock.accept()  # TODO: Figure out why this I/O operation actually works while other don't
+        conn, addr = await asock.accept()
         logging.info(f"{addr} connected")
         task = loop.spawn(echo_server(conn, addr))
-#        await task.cancel()   # Cancel task!
 
 
 async def echo_server(sock: AsyncSocket, addr: tuple):
     with sock:
-        # Without the try/except block and the call to giambio.join(), the task would block here
         await sock.send_all(b"Welcome to the server pal!\n")
         while True:
             data = await sock.receive(1000)

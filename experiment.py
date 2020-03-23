@@ -4,16 +4,17 @@ loop = giambio.EventLoop()
 
 """
 
-What works and what does not (23rd March 2020 22:38 PM)
+What works and what does not (23rd March 2020 23:24 PM)
 
 - Run tasks concurrently: V
 - Join mechanism: V
 - Sleep mechanism: V
 - Cancellation mechanism: X  Note: Figure out how to rescheule parent task
 - Exception propagation: V
-- Concurrent I/O: X   Note: I/O would work only when a task is joined (weird)
+- Concurrent I/O: V
 - Return values of coroutines: V
 - Scheduling tasks for future execution: V
+- Task Spawner (context manager): X  Note: Not Implemented
 
 """
 
