@@ -11,8 +11,8 @@ What works and what does not (21st March 2020 11:22 AM)
 - Cancellation mechanism: V
 - Exception propagation: V
 - Concurrent I/O: X   Note: I/O would work only when a task is joined (weird)
-- Return values of coroutines: X     Note: Return values ARE actually stored in task objects properly, but are messed up later when joining tasks
-- Scheduling tasks for future execution: V
+- Return values of coroutines: V
+- Scheduling tasks for future execution: X
 
 """
 
@@ -40,11 +40,9 @@ async def count(stop, step=1):
 async def main():
     print("Spawning countdown immediately, scheduling count for 2 secs from now")
     task = loop.spawn(countdown(8))
-    task1 = loop.spawn(count(8, 2))
-    await giambio.sleep(2)
-    await task.cancel()
-    result = await task1.join()   # Joining multiple tasks still causes problems
-    result1 = await task.join()
+    task1 = loop.schedule(count(8, 2), 2)
+    result = await task.join()
+#    result1 = await task1.join()   # Joining a scheduled task does not reschedule the parent task
     print(result, result1)
     print("All done")
 

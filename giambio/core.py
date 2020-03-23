@@ -71,7 +71,7 @@ class EventLoop:
         """Schedules a task for execution after n seconds"""
 
         self.sequence += 1
-        task = Task(coroutine)
+        task = Task(coroutine, self)
         heappush(self.paused, (self.clock() + when, self.sequence, task))
         return task
 
@@ -120,7 +120,7 @@ class EventLoop:
         if coro not in self.joined:
             self.joined[coro].append(self.running)
         else:
-            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+            self.running.throw(AlreadyJoinedError("Joining the same task multiple times is not allowed!"))
 
     def want_sleep(self, seconds):
         self.sequence += 1   # Make this specific sleeping task unique to avoid error when comparing identical deadlines
@@ -170,6 +170,7 @@ class Task:
         return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.result})"
 
     def throw(self, exception: Exception):
+        self.result = Result(None, exception)
         return self.coroutine.throw(exception)
 
     async def cancel(self):
