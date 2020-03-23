@@ -51,6 +51,8 @@ class EventLoop:
                 except StopIteration as e:
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
+                except RuntimeError:
+                    self.to_run.append(self.running)
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                     if self.running.joined:    # Let the join function handle the hassle of propagating the error
@@ -158,6 +160,7 @@ class Task:
         self.joined = False
         self.result = None   # Updated when the coroutine execution ends
         self.loop = loop  # The EventLoop object that spawned the task
+        self.cancelled = False
 
     def run(self):
         self.status = True
@@ -210,9 +213,10 @@ def want_write(sock: socket.socket):
 def join(task: Task):
     """'Tells' the scheduler that the desired task MUST be awaited for completion"""
 
-    task.joined = True
-    yield "want_join", task
-    return task.get_result()
+    if not task.cancelled:
+        task.joined = True
+        yield "want_join", task
+        return task.get_result()
 
 
 @types.coroutine
