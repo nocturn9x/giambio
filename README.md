@@ -25,3 +25,10 @@ A library like giambio implements some low-level primitives and a main loop (kno
 
 And that's how it works!
 
+
+## Let's code
+
+Now you might think _"That's cool and neat and everything, but how do I use it?"_, and you're right. Let's write some code with giambio!
+
+
+### TODO: Add code examples and a brief explanation of coroutines
