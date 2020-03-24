@@ -13,7 +13,7 @@ This library implements what is known as a stackless mode of execution, or "gree
 Right now this is no more than a toy implementation to help me understand how Python and async work, but it will (hopefully) become a production ready library soon
 
 
-## Let's Code!
+## A small explanation
 
 Libraries like giambio shine the most when it comes to performing asyncronous I/O (reading a socket, writing to a file, stuff like that).
 
