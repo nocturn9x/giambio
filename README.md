@@ -31,4 +31,7 @@ And that's how it works!
 Now you might think _"That's cool and neat and everything, but how do I use it?"_, and you're right. Let's write some code with giambio!
 
 
-### TODO: Add code examples and a brief explanation of coroutines
+giambio has been designed with simplicity in mind and to expose a clean API to its users, so this README won't go deep in the explanation of what a coroutine is. For the sake of this tutorial all you need to know is that a coroutine is a function defined with `async def` instead of the regular `def`, that a coroutine can call other coroutines (while synchronous functions can't) and enables the Python 3.5 new feature, which is `await` (basically an abstraction layer for `yield`)
+
+Just to clarify things, giambio does not avoid the Global Interpreter Lock nor it performs any sort of multithreading or multiprocessing (at least by default). Remember **concurrency is not parallelism**, concurrent tasks will switch back and forth and proceed with their calculations but won't be running independently like they would do if they were forked off to a process pool. That's why it is called concurrency, because multiple tasks **concur** for the same amount of resources. (Which is basically the same things that happens inside your CPU at a much lower level, because processors run many more tasks than their number of logical cores)
+
