@@ -35,3 +35,29 @@ giambio has been designed with simplicity in mind and to expose a clean API to i
 
 Just to clarify things, giambio does not avoid the Global Interpreter Lock nor it performs any sort of multithreading or multiprocessing (at least by default). Remember **concurrency is not parallelism**, concurrent tasks will switch back and forth and proceed with their calculations but won't be running independently like they would do if they were forked off to a process pool. That's why it is called concurrency, because multiple tasks **concur** for the same amount of resources. (Which is basically the same things that happens inside your CPU at a much lower level, because processors run many more tasks than their number of logical cores)
 
+Enough talking though, this is how a giambio based application looks like
+
+```python
+
+import giambio
+import socket
+
+
+loop = giambio.EventLoop()
+addrs = ["example.com", "some-domain.tld", "other-site.net"]
+
+async def io_bound_task():
+    res = []
+    for addr in addrs:
+        sock = loop.wrap_socket(socket.socket())  # This returns a new AsyncSocket object
+        await sock.connect(addr)
+        res.append(await sock.receive(1024))  # Get some data and append it to a list
+        return res
+
+async def main():
+    task = await giambio.spawn(io_bound_task())
+    task2 = await giambio.spawn(io_bound_task())  # Task object
+    # These two will execute concurrently!
+
+loop.start(main)  # Note the absence of parentheses
+```
