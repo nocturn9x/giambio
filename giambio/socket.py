@@ -42,7 +42,6 @@ class AsyncSocket(object):
 
         await self.loop.connect_sock(self.sock, addr)
 
-
     def __enter__(self):
         return self.sock.__enter__()
 
@@ -52,5 +51,5 @@ class AsyncSocket(object):
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
 
-    def __getitem__(self, item):
-        return self.sock.__getitem__(item)
+    def __getattribute__(self, item):
+        return self.sock.__getattribute__(item)

@@ -26,7 +26,7 @@ async def countdown(n):
             await giambio.sleep(1)
         print("Countdown over")
         return "Count DOWN over"
-    except giambio.exceptions.CancelledError:
+    except giambio.CancelledError:
         print("countdown cancelled!")
 
 async def count(stop, step=1):
@@ -38,14 +38,14 @@ async def count(stop, step=1):
             await giambio.sleep(step)
         print("Countup over")
         return "Count UP over"
-    except giambio.exceptions.CancelledError:
+    except giambio.CancelledError:
         print("count cancelled!")
 
 async def main():
     print("Spawning countdown immediately, scheduling count for 4 secs from now")
     task = loop.spawn(countdown(8))
-    task1 = loop.schedule(count(8, 2), 4)
-    await giambio.sleep(0)  # Beware! Cancelling a task straight away will propagate the error in the parent
+    task1 = loop.schedule(count(8, 2), 4)   # Schedules the task, it will be ran 4 seconds from now
+    await giambio.sleep(0)  # Act as a checkpoint to switch tasks. Beware! Cancelling a task straight away will propagate the error in the parent
 #    await task.cancel()    # TODO: Fix this to reschedule the parent task properly
     result = await task.join()
     result1 = await task1.join()
