@@ -7,6 +7,8 @@ from .exceptions import AlreadyJoinedError, CancelledError
 from timeit import default_timer
 from time import sleep as wait
 from .socket import AsyncSocket
+from .traps import join, sleep, want_read, want_write, cancel
+from .abstractions import Task, Result
 
 
 class EventLoop:
@@ -114,6 +116,8 @@ class EventLoop:
         await want_read(sock)
         return sock.accept()
 
+
+
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """Sends all the passed data, as bytes, trough the socket asynchronously"""
 
@@ -153,99 +157,9 @@ class EventLoop:
 
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
-        await want_write(sock)
-        return sock.connect(addr)
+        try:
+            sock.connect(addr)
+        except BlockingIOError:
+            await want_write(sock)
 
 
-class Result:
-    """A wrapper for results of coroutines"""
-
-    def __init__(self, val=None, exc: Exception = None):
-        self.val = val
-        self.exc = exc
-
-    def __repr__(self):
-        return f"giambio.core.Result({self.val}, {self.exc})"
-
-
-class Task:
-
-    """A simple wrapper around a coroutine object"""
-
-    def __init__(self, coroutine: types.coroutine, loop: EventLoop):
-        self.coroutine = coroutine
-        self.status = False  # Not ran yet
-        self.joined = False
-        self.result = None   # Updated when the coroutine execution ends
-        self.loop = loop  # The EventLoop object that spawned the task
-        self.cancelled = False
-
-    def run(self):
-        self.status = True
-        return self.coroutine.send(None)
-
-    def __repr__(self):
-        return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.result})"
-
-    def throw(self, exception: Exception):
-        self.result = Result(None, exception)
-        return self.coroutine.throw(exception)
-
-    async def cancel(self):
-        return await cancel(self)
-
-    async def join(self):
-        return await join(self)
-
-    def get_result(self):
-        if self.result:
-            if self.result.exc:
-                raise self.result.exc
-            else:
-                return self.result.val
-
-
-@types.coroutine
-def sleep(seconds: int):
-    """Pause the execution of a coroutine for the passed amount of seconds,
-    without blocking the entire event loop, which keeps watching for other events
-
-    This function is also useful as a sort of checkpoint, because it returns the execution
-    control to the scheduler, which can then switch to another task. If a coroutine does not have
-    enough calls to async methods (or 'checkpoints'), e.g one that needs the 'await' keyword before it, this might
-    affect performance as it would prevent the scheduler from switching tasks properly. If you feel
-    like this happens in your code, try adding a call to giambio.sleep(0); this will act as a checkpoint without
-    actually pausing the execution of your coroutine"""
-
-    yield "want_sleep", seconds
-
-
-@types.coroutine
-def want_read(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to read from the passed socket"""
-
-    yield "want_read", sock
-
-
-@types.coroutine
-def want_write(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to write into the passed socket"""
-
-    yield "want_write", sock
-
-
-@types.coroutine
-def join(task: Task):
-    """'Tells' the scheduler that the desired task MUST be awaited for completion"""
-
-    if not task.cancelled:
-        task.joined = True
-        yield "want_join", task
-        return task.get_result()
-
-
-@types.coroutine
-def cancel(task: Task):
-    """'Tells' the scheduler that the passed task must be cancelled"""
-
-    yield "want_cancel", task
