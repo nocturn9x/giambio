@@ -39,4 +39,7 @@ async def echo_server(sock: AsyncSocket, addr: tuple):
     logging.info(f"Connection from {addr} closed")
 
 
-loop.start(make_srv, ('', 1501))
+try:
+    loop.start(make_srv, ('', 1501))
+except KeyboardInterrupt:      # Exceptions propagate!
+    pass
