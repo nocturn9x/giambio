@@ -72,5 +72,6 @@ def _cancel(task):
        be cancelled at any time
     """
 
+    task.cancelled = True
     yield "want_cancel", task
 

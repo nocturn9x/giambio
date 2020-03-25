@@ -4,17 +4,17 @@ loop = giambio.EventLoop()
 
 """
 
-What works and what does not (23rd March 2020 23:24 PM)
+What works and what does not (25th March 2020 20:35)
 
 - Run tasks concurrently: V
 - Join mechanism: V
 - Sleep mechanism: V
-- Cancellation mechanism: X  Note: Figure out how to rescheule parent task
+- Cancellation mechanism: V
 - Exception propagation: V
 - Concurrent I/O: V
 - Return values of coroutines: V
 - Scheduling tasks for future execution: V
-- Task Spawner (context manager): X  Note: Not Implemented
+- Task Spawner (context manager): V
 
 """
 
@@ -28,7 +28,7 @@ async def countdown(n):
         return "Count DOWN over"
     except giambio.CancelledError:
         print("countdown cancelled!")
-
+        raise Exception("Oh no!")   #TODO Propagate this
 
 async def count(stop, step=1):
     try:
@@ -44,13 +44,16 @@ async def count(stop, step=1):
 
 
 async def main():
-    print("Spawning countdown immediately, scheduling count for 4 secs from now")
-    async with giambio.TaskManager(loop) as manager:
-        task = await manager.spawn(countdown(4))
-        await manager.schedule(count(8, 2), 4)
-        await task.cancel()
-    for task, ret in manager.values.items():
-        print(f"Function '{task.coroutine.__name__}' at {hex(id(task.coroutine))} returned an object of type '{type(ret).__name__}': {repr(ret)}")
-
+    try:
+        print("Spawning countdown immediately, scheduling count for 4 secs from now")
+        async with giambio.TaskManager(loop) as manager:
+            task = manager.spawn(countdown(4))
+            manager.schedule(count(8, 2), 4)
+            await task.cancel()
+        for task, ret in manager.values.items():
+            print(f"Function '{task.coroutine.__name__}' at {hex(id(task.coroutine))} returned an object of type '{type(ret).__name__}': {repr(ret)}")
+    except:   # TODO: Fix this, see above
+        pass
 
 loop.start(main)
+

@@ -18,18 +18,23 @@ class TaskManager:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *args):
-        for task in self.tasks:
-            if task.cancelled:
-                self.values[task] = CancelledError()
-            else:
-                self.values[task] = await task.join(self.silent)
+    async def __aexit__(self, type, value, traceback):
+        if type:
+            # TODO: Handle exceptions here
+            ...
+        else:
+            for task in self.tasks:
+                if not task.cancelled:
+                    self.values[task] = await task.join()
+                else:
+                    self.values[task] = CancelledError()
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""
 
         task = Task(coroutine, self)
         self.loop.to_run.append(task)
+        self.tasks.append(task)
         return task
 
     def schedule(self, coroutine: types.coroutine, when: int):
@@ -37,5 +42,6 @@ class TaskManager:
 
         self.loop.sequence += 1
         task = Task(coroutine, self)
+        self.tasks.append(task)
         heappush(self.loop.paused, (self.loop.clock() + when, self.loop.sequence, task))
         return task

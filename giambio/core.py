@@ -10,6 +10,7 @@ from .socket import AsyncSocket, WantRead, WantWrite
 from .abstractions import Task, Result
 from socket import SOL_SOCKET, SO_ERROR
 from .traps import _join, _sleep, _want_read, _want_write, _cancel
+from .util import TaskManager
 
 
 class EventLoop:
@@ -59,10 +60,8 @@ class EventLoop:
                     self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
-                    if self.running.joined:    # Let the join function handle the hassle of propagating the error
-                        self.running.result = Result(None, has_raised)  # Save the exception
-                    else:  # Let the exception propagate (I'm looking at you asyncIO ;))
-                        raise
+                    self.running.result = Result(None, has_raised)  # Save the exception
+                    raise
                 except KeyboardInterrupt:
                     self.running.throw(KeyboardInterrupt)
 
@@ -70,7 +69,7 @@ class EventLoop:
     def start(self, coroutine: types.coroutine, *args, **kwargs):
         """Starts the event loop"""
 
-        self.to_run.append(coroutine(*args, **kwargs))
+        TaskManager(self).spawn(coroutine(*args, **kwargs))
         self.loop()
 
     def want_read(self, sock: socket.socket):
@@ -124,6 +123,7 @@ class EventLoop:
         coroutine returns or, if an exception gets raised, the exception will get propagated inside the
         parent task"""
 
+
         if coro not in self.joined:
             self.joined[coro].append(self.running)
         else:
@@ -137,10 +137,11 @@ class EventLoop:
             self.to_run.append(self.running)    # Reschedule the task that called sleep
 
     def want_cancel(self, task):
-        task.cancelled = True
         self.to_run.extend(self.joined.pop(self.running, ()))
         self.to_run.append(self.running)   # Reschedules the parent task
+#        task.cancelled = True
         task.throw(CancelledError())
+
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         try:			# "Borrowed" from curio
