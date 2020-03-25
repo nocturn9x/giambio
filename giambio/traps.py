@@ -34,21 +34,35 @@ def want_write(sock: socket.socket):
 
 
 @types.coroutine
-def join(task):
-    """'Tells' the scheduler that the desired task MUST be awaited for completion"""
+def join(task, silent=False):
+    """'Tells' the scheduler that the desired task MUST be awaited for completion
+        If silent is True, any exception in the child task will be discarded"""
 
     if task.cancelled:
-        raise TaskCancelled("Cannot join cancelled task!")
-    if task.execution == "FINISH":
-        raise TaskFinished("Cannot join already terminated task!")
+        raise TaskCancelled("cannot join cancelled task!")
     task.joined = True
     yield "want_join", task
-    return task.get_result()    # This raises an exception if the child task errored
-
+    if silent:
+        try:
+            return task.get_result()   # Exception silenced
+        except:
+            return None
+    else:
+        return task.get_result()   # Will raise
 
 @types.coroutine
 def cancel(task):
     """'Tells' the scheduler that the passed task must be cancelled"""
 
     yield "want_cancel", task
+
+@types.coroutine
+def join_unfinished(task):
+    """Same as join(), but it will raise a TaskFinished exception if the task already ended"""
+
+    if task.execution == "FINISH":
+        raise TaskFinished("task has already ended!")
+    yield "want_join", task
+    task.joined = True
+    return task.get_result()
 

@@ -6,17 +6,18 @@ class TaskManager(Task):
     """Class to be used inside context managers to spawn multiple tasks and be sure that they will all joined before the code exits the with block"""
 
 
-    def __init__(self, loop):
+    def __init__(self, loop, silent=False):
         self.tasks = deque()    # All tasks spawned
         self.values = {}   # Results OR exceptions of each task
         self.loop = loop
+        self.silent = silent
 
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, *args):
         for task in self.tasks:
-            self.values[task.coroutine.__name__] = await task.join()
+            self.values[task.coroutine.__name__] = await task.join(self.silent)
 
     async def spawn(self, coro):
         task = self.loop.spawn(coro)

@@ -50,6 +50,7 @@ class EventLoop:
                 try:
                     method, *args = self.running.run()
                     getattr(self, method)(*args)   # Sneaky method call, thanks to David Beazley for this ;)
+                    self.running.steps += 1
                 except StopIteration as e:
                     self.running.execution = "FINISH"
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value

@@ -25,6 +25,7 @@ class Task:
         self.loop = loop  # The EventLoop object that spawned the task
         self.cancelled = False
         self.execution = "INIT"
+        self.steps = 0    # How many steps did the task do before ending, incremented while executing
 
     def run(self):
         self.status = True
@@ -40,8 +41,8 @@ class Task:
     async def cancel(self):
         return await cancel(self)
 
-    async def join(self):
-        return await join(self)
+    async def join(self, silent=False):
+        return await join(self, silent)
 
     def get_result(self):
         if self.result:
