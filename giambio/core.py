@@ -11,6 +11,7 @@ from .abstractions import Task, Result
 from socket import SOL_SOCKET, SO_ERROR
 from .traps import join, sleep, want_read, want_write, cancel
 
+
 class EventLoop:
 
     """Implementation of an event loop, alternates between execution of coroutines (asynchronous functions)
@@ -50,6 +51,7 @@ class EventLoop:
                     method, *args = self.running.run()
                     getattr(self, method)(*args)   # Sneaky method call, thanks to David Beazley for this ;)
                 except StopIteration as e:
+                    self.running.execution = "FINISH"
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except RuntimeError:

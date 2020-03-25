@@ -15,3 +15,6 @@ class CancelledError(GiambioError):
 
 class TaskCancelled(GiambioError):
     """This exception is raised when the user attempts to join a cancelled task"""
+
+class TaskFinished(TaskCancelled):
+    """This exception is raised when the user attempts to join an already finished task"""

@@ -39,6 +39,8 @@ def join(task):
 
     if task.cancelled:
         raise TaskCancelled("Cannot join cancelled task!")
+    if task.execution == "FINISH":
+        raise TaskFinished("Cannot join already terminated task!")
     task.joined = True
     yield "want_join", task
     return task.get_result()    # This raises an exception if the child task errored

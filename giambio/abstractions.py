@@ -1,5 +1,6 @@
 import types
 from .traps import join, sleep, want_read, want_write, cancel
+from .exceptions import CancelledError
 
 class Result:
     """A wrapper for results of coroutines"""
@@ -23,6 +24,7 @@ class Task:
         self.result = None   # Updated when the coroutine execution ends
         self.loop = loop  # The EventLoop object that spawned the task
         self.cancelled = False
+        self.execution = "INIT"
 
     def run(self):
         self.status = True
