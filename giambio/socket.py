@@ -6,6 +6,13 @@ Basic abstraction layer for giambio asynchronous sockets
 
 
 import socket
+try:
+    from ssl import SSLWantReadError, SSLWantWriteError
+    WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
+    WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
+except ImportError:
+    WantRead = (BlockingIOError, InterruptedError)
+    WantWrite = (BlockingIOError, InterruptedError)
 
 
 class AsyncSocket(object):

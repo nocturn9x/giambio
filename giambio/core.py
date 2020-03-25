@@ -6,10 +6,10 @@ import socket
 from .exceptions import AlreadyJoinedError, CancelledError
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket
+from .socket import AsyncSocket, WantRead, WantWrite
 from .traps import join, sleep, want_read, want_write, cancel
 from .abstractions import Task, Result
-
+from socket import SOL_SOCKET, SO_ERROR
 
 class EventLoop:
 
@@ -157,9 +157,11 @@ class EventLoop:
 
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
-        try:
-            sock.connect(addr)
-        except BlockingIOError:
+        try:			# "Borrowed" from curio
+            result = sock.connect(addr)
+            return result
+        except WantWrite:
             await want_write(sock)
-
-
+        err = sock.getsockopt(SOL_SOCKET, SO_ERROR)
+        if err != 0:
+            raise OSError(err, f'Connect call failed {addr}')
