@@ -44,12 +44,13 @@ async def count(stop, step=1):
 async def main():
     print("Spawning countdown immediately, scheduling count for 4 secs from now")
     task = loop.spawn(countdown(8))
-    task1 = loop.schedule(count(8, 2), 4)   # Schedules the task, it will be ran 4 seconds from now
+    task1 = loop.schedule(count(6, 2), 4)   # Schedules the task, it will be ran 4 seconds from now
     await giambio.sleep(0)  # TODO: Fix this to avoid the need to use a checkpoint before cancelling
     await task.cancel()
 #    result = await task.join()  # Would raise TaskError!
+    result = 'Task cancelled' if task.cancelled else task.result.val
     result1 = await task1.join()
-    print(f"countdown returned: {None}\ncount returned: {result1}")
+    print(f"countdown returned: {result}\ncount returned: {result1}")
     print("All done")
 
 loop.start(main)
