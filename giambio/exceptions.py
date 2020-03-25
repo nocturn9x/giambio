@@ -12,3 +12,6 @@ class CancelledError(GiambioError):
 
     def __repr__(self):
         return "giambio.exceptions.CancelledError"
+
+class TaskCancelled(GiambioError):
+    """This exception is raised when the user attempts to join a cancelled task"""

@@ -7,9 +7,9 @@ from .exceptions import AlreadyJoinedError, CancelledError
 from timeit import default_timer
 from time import sleep as wait
 from .socket import AsyncSocket, WantRead, WantWrite
-from .traps import join, sleep, want_read, want_write, cancel
 from .abstractions import Task, Result
 from socket import SOL_SOCKET, SO_ERROR
+from .traps import join, sleep, want_read, want_write, cancel
 
 class EventLoop:
 
@@ -53,7 +53,7 @@ class EventLoop:
                     self.running.result = Result(e.args[0] if e.args else None, None)  # Saves the return value
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except RuntimeError:
-                    self.to_run.extend(self.joined.pop(self.running, ()))
+                    self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
                     self.to_run.append(self.running)
                 except Exception as has_raised:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
@@ -116,8 +116,6 @@ class EventLoop:
         await want_read(sock)
         return sock.accept()
 
-
-
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """Sends all the passed data, as bytes, trough the socket asynchronously"""
 
@@ -151,10 +149,10 @@ class EventLoop:
             self.to_run.append(self.running)    # Reschedule the task that called sleep
 
     def want_cancel(self, task):
-        self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
         task.cancelled = True
+        self.to_run.extend(self.joined.pop(self.running, ()))
+        self.to_run.append(self.running)   # Reschedules the parent task
         task.throw(CancelledError())
-
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         try:			# "Borrowed" from curio

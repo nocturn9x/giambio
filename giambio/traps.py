@@ -2,8 +2,7 @@
 
 import types
 import socket
-from .abstractions import Task
-
+from .exceptions import TaskCancelled
 
 @types.coroutine
 def sleep(seconds: int):
@@ -35,16 +34,18 @@ def want_write(sock: socket.socket):
 
 
 @types.coroutine
-def join(task: Task):
+def join(task):
     """'Tells' the scheduler that the desired task MUST be awaited for completion"""
 
+    if task.cancelled:
+        raise TaskCancelled("Cannot join cancelled task!")
     task.joined = True
     yield "want_join", task
     return task.get_result()    # This raises an exception if the child task errored
 
 
 @types.coroutine
-def cancel(task: Task):
+def cancel(task):
     """'Tells' the scheduler that the passed task must be cancelled"""
 
     yield "want_cancel", task

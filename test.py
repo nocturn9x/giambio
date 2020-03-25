@@ -3,7 +3,6 @@ from giambio.socket import AsyncSocket
 import socket
 import logging
 
-
 loop = giambio.core.EventLoop()
 
 logging.basicConfig(level=20,

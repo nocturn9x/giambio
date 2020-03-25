@@ -1,5 +1,5 @@
 import types
-
+from .traps import join, sleep, want_read, want_write, cancel
 
 class Result:
     """A wrapper for results of coroutines"""
