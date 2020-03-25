@@ -29,6 +29,7 @@ async def countdown(n):
     except giambio.CancelledError:
         print("countdown cancelled!")
 
+
 async def count(stop, step=1):
     try:
         x = 0
@@ -41,21 +42,15 @@ async def count(stop, step=1):
     except giambio.CancelledError:
         print("count cancelled!")
 
+
 async def main():
     print("Spawning countdown immediately, scheduling count for 4 secs from now")
-    task = loop.spawn(countdown(8))
-    task1 = loop.schedule(count(6, 2), 4)   # Schedules the task, it will be ran 4 seconds from now
-    await giambio.sleep(2)  # TODO: Fix this to avoid the need to use a checkpoint before cancelling
-#    await task.cancel()
-    result = await task.join()  # Would raise TaskCancelled if the task was cancelled
-    result = 'Task cancelled' if task.cancelled else task.result.val
-    result1 = await task1.join()
-    print(f"countdown returned: {result}\ncount returned: {result1}")
-    print("All done")
-    print("PT. 2 Context Manager")
     async with giambio.TaskManager(loop) as manager:
-        task2 = await manager.spawn(countdown(8))
-        task3 = await manager.schedule(count(16, 2), 4)
-    print(manager.values)
+        task = await manager.spawn(countdown(4))
+        await manager.schedule(count(8, 2), 4)
+        await task.cancel()
+    for task, ret in manager.values.items():
+        print(f"Function '{task.coroutine.__name__}' at {hex(id(task.coroutine))} returned an object of type '{type(ret).__name__}': {repr(ret)}")
+
 
 loop.start(main)

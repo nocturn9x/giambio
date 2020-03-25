@@ -9,7 +9,7 @@ from time import sleep as wait
 from .socket import AsyncSocket, WantRead, WantWrite
 from .abstractions import Task, Result
 from socket import SOL_SOCKET, SO_ERROR
-from .traps import join, sleep, want_read, want_write, cancel
+from .traps import _join, _sleep, _want_read, _want_write, _cancel
 
 
 class EventLoop:
@@ -66,25 +66,11 @@ class EventLoop:
                 except KeyboardInterrupt:
                     self.running.throw(KeyboardInterrupt)
 
-    def spawn(self, coroutine: types.coroutine):
-        """Schedules a task for execution, appending it to the call stack"""
-
-        task = Task(coroutine, self)
-        self.to_run.append(task)
-        return task
-
-    def schedule(self, coroutine: types.coroutine, when: int):
-        """Schedules a task for execution after n seconds"""
-
-        self.sequence += 1
-        task = Task(coroutine, self)
-        heappush(self.paused, (self.clock() + when, self.sequence, task))
-        return task
 
     def start(self, coroutine: types.coroutine, *args, **kwargs):
         """Starts the event loop"""
 
-        self.spawn(coroutine(*args, **kwargs))
+        self.to_run.append(coroutine(*args, **kwargs))
         self.loop()
 
     def want_read(self, sock: socket.socket):
@@ -107,7 +93,7 @@ class EventLoop:
         from the socket
         """
 
-        await want_read(sock)
+        await _want_read(sock)
         return sock.recv(buffer)
 
     async def accept_sock(self, sock: socket.socket):
@@ -115,21 +101,21 @@ class EventLoop:
         result of the accept() call
         """
 
-        await want_read(sock)
+        await _want_read(sock)
         return sock.accept()
 
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """Sends all the passed data, as bytes, trough the socket asynchronously"""
 
         while data:
-            await want_write(sock)
+            await _want_write(sock)
             sent_no = sock.send(data)
             data = data[sent_no:]
 
     async def close_sock(self, sock: socket.socket):
         """Closes the socket asynchronously"""
 
-        await want_write(sock)
+        await _want_write(sock)
         return sock.close()
 
     def want_join(self, coro: types.coroutine):
@@ -161,7 +147,7 @@ class EventLoop:
             result = sock.connect(addr)
             return result
         except WantWrite:
-            await want_write(sock)
+            await _want_write(sock)
         err = sock.getsockopt(SOL_SOCKET, SO_ERROR)
         if err != 0:
             raise OSError(err, f'Connect call failed {addr}')
