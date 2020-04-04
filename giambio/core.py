@@ -4,7 +4,7 @@ from collections import deque, defaultdict
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from heapq import heappush, heappop
 import socket
-from .exceptions import AlreadyJoinedError, CancelledError
+from .exceptions import AlreadyJoinedError, CancelledError, GiambioError
 from timeit import default_timer
 from time import sleep as wait
 from .socket import AsyncSocket, WantRead, WantWrite
@@ -29,6 +29,7 @@ class EventLoop:
         self.joined = defaultdict(list)  # Tasks that want to join
         self.clock = default_timer  # Monotonic clock to keep track of elapsed time
         self.sequence = 0  # To avoid TypeError in the (unlikely) event of two task with the same deadline we use a unique and incremental integer pushed to the queue together with the deadline and the function itself
+        self._exiting = False
 
     def loop(self):
         """Main event loop for giambio"""
@@ -63,9 +64,12 @@ class EventLoop:
                     self.running.execution = "CANCELLED"
                     self.to_run.extend(self.joined.pop(self.running, ()))
                 except Exception as err:
-                    self.running.execution = "ERRORED"
-                    self.running.result = Result(None, err)
-                    self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
+                    if not self._exiting:
+                        self.running.execution = "ERRORED"
+                        self.running.result = Result(None, err)
+                        self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
+                    else:
+                        raise
                 except KeyboardInterrupt:
                     self.running.throw(KeyboardInterrupt)
 

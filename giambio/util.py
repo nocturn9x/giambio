@@ -17,8 +17,10 @@ class TaskManager:
 
 
     async def _cancel_and_raise(self, exc):
+        self.loop._exiting = True   # Tells the loop not to catch all exceptions
         for task in self.tasks:
             await task.cancel()
+        raise exc
 
     async def __aenter__(self):
         return self

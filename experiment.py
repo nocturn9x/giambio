@@ -30,7 +30,7 @@ async def countdown(n):
         return "Count DOWN over"
     except giambio.CancelledError:
         print("countdown cancelled!")
-        raise Exception("Oh no!")   #TODO Propagate this
+        raise Exception("Oh no!")   # TODO Propagate this
 
 async def count(stop, step=1):
     try:
