@@ -10,7 +10,7 @@ class Result:
         self.exc = exc
 
     def __repr__(self):
-        return f"giambio.core.Result({self.val}, {self.exc})"
+        return f"giambio.core.Result({self.val}, {repr(self.exc)})"
 
 
 class Task:
@@ -19,7 +19,6 @@ class Task:
 
     def __init__(self, coroutine: types.coroutine, loop):
         self.coroutine = coroutine
-        self.status = False   # Not ran yet
         self.joined = False   # True if the task is joined
         self.result = None   # Updated when the coroutine execution ends
         self.loop = loop  # The EventLoop object that spawned the task
@@ -30,8 +29,10 @@ class Task:
     def run(self):
         """Simple abstraction layer over the coroutines ``send`` method"""
 
-        self.status = True
+        self.steps += 1
+        self.execution = "RUNNING"
         return self.coroutine.send(None)
+
 
     def __repr__(self):
         return f"giambio.core.Task({self.coroutine}, {self.status}, {self.joined}, {self.result})"
@@ -53,12 +54,4 @@ class Task:
         return await _join(self, silent)
 
     def get_result(self, silenced=False):
-        if self.result:
-            if not silenced:
-                if self.result.exc:
-                    raise self.result.exc
-                else:
-                    return self.result.val
-            return self.result.val if self.result.val else self.result.exc
-
-
+        return self.result

@@ -15,19 +15,21 @@ class TaskManager:
         self.loop = loop   # The event loop that spawned the TaskManager
         self.silent = silent   # Make exceptions silent? (not recommended)
 
+
+    async def _cancel_and_raise(self, exc):
+        for task in self.tasks:
+            await task.cancel()
+
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, type, value, traceback):
-        if type:
-            # TODO: Handle exceptions here
-            ...
-        else:
-            for task in self.tasks:
-                if not task.cancelled:
-                    self.values[task] = await task.join()
-                else:
-                    self.values[task] = CancelledError()
+        while self.tasks:
+            task = self.tasks.popleft()
+            self.values[task] = await task.join()
+            if task.result.exc:
+                if task.result.exc != CancelledError:
+                    await self._cancel_and_raise(task.result.exc)
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""

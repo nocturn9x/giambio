@@ -1,3 +1,4 @@
+
 import types
 from collections import deque, defaultdict
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
@@ -58,10 +59,13 @@ class EventLoop:
                     self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
                 except RuntimeError:
                     self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
-                except Exception as has_raised:
-                    self.to_run.extend(self.joined.pop(self.running, ()))  # Reschedules the parent task
-                    self.running.result = Result(None, has_raised)  # Save the exception
-                    raise
+                except CancelledError:
+                    self.running.execution = "CANCELLED"
+                    self.to_run.extend(self.joined.pop(self.running, ()))
+                except Exception as err:
+                    self.running.execution = "ERRORED"
+                    self.running.result = Result(None, err)
+                    self.to_run.extend(self.joined.pop(self.running, ()))   # Reschedules the parent task
                 except KeyboardInterrupt:
                     self.running.throw(KeyboardInterrupt)
 
@@ -139,7 +143,6 @@ class EventLoop:
     def want_cancel(self, task):
         self.to_run.extend(self.joined.pop(self.running, ()))
         self.to_run.append(self.running)   # Reschedules the parent task
-#        task.cancelled = True
         task.throw(CancelledError())
 
 
@@ -151,4 +154,4 @@ class EventLoop:
             await _want_write(sock)
         err = sock.getsockopt(SOL_SOCKET, SO_ERROR)
         if err != 0:
-            raise OSError(err, f'Connect call failed {addr}')
+            raise OSError(err, f'Connect call failed: {addr}')
