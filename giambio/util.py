@@ -19,11 +19,8 @@ class TaskManager:
     async def _cancel_and_raise(self, exc):
         if not isinstance(exc, CancelledError):
             self.loop._exiting = True   # Tells the loop not to catch all exceptions
-            try:
-                for task in self.tasks:
-                    await task.cancel()
-            except Exception:
-                pass
+            for task in self.tasks:
+                await task.cancel()
             raise exc
 
     async def __aenter__(self):

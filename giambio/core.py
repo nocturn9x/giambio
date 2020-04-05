@@ -147,8 +147,10 @@ class EventLoop:
     def want_cancel(self, task):
         self.to_run.extend(self.joined.pop(self.running, ()))
         self.to_run.append(self.running)   # Reschedules the parent task
-        task.throw(CancelledError())
-
+        try:
+            task.throw(CancelledError())
+        except Exception as e:
+            task.result.exc = e
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         try:			# "Borrowed" from curio

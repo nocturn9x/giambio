@@ -4,13 +4,13 @@ loop = giambio.EventLoop()
 
 """
 
-What works and what does not (5 Apr 2020 12:06 AM):
+What works and what does not (5 Apr 2020 13:35)
 
 - Run tasks concurrently: V
 - Join mechanism: V
 - Sleep mechanism: V
 - Cancellation mechanism: V
-- Exception propagation: X   Note: Almost ready
+- Exception propagation: V
 - Concurrent I/O: V
 - Return values of coroutines: V
 - Scheduling tasks for future execution: V
@@ -26,6 +26,7 @@ What's left to implement:
 - Debugging tools
 """
 
+
 async def countdown(n):
     try:
         while n > 0:
@@ -38,7 +39,7 @@ async def countdown(n):
         return "Count DOWN over"
     except giambio.CancelledError:
         print("countdown cancelled!")
-        raise Exception("Oh no!")   # TODO Propagate this
+#        raise Exception("Oh no!")   # This will propagate
 
 async def count(stop, step=1):
     try:
@@ -51,7 +52,7 @@ async def count(stop, step=1):
         return "Count UP over"
     except giambio.CancelledError:
         print("count cancelled!")
-#        raise BaseException      # This will propagate
+
 
 async def main():
     try:
@@ -59,11 +60,12 @@ async def main():
         async with giambio.TaskManager(loop) as manager:
             task = manager.spawn(countdown(8))
             task2 = manager.schedule(count(8, 2), 4)
-            await task.cancel()   # This works, but other tasks continue running
+#            await giambio.sleep(3)
+#            await task.cancel()   # This works, but other tasks continue running
         for task, ret in manager.values.items():
             print(f"Function '{task.coroutine.__name__}' at {hex(id(task.coroutine))} returned an object of type '{type(ret).__name__}': {repr(ret)}")
     except Exception as e:
-        print(f"Actually I prefer to catch it here: {e}")  # Everything works just as expected, the try/except block below won't trigger
+        print(f"Actually I prefer to catch it here: {repr(e)}")  # Everything works just as expected, the try/except block below won't trigger
 
 
 try:
