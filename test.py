@@ -17,10 +17,11 @@ async def make_srv(address: tuple):
     sock.listen(5)
     asock = loop.wrap_socket(sock)
     logging.info(f"Echo server serving asynchronously at {address}")
-    while True:
-        conn, addr = await asock.accept()
-        logging.info(f"{addr} connected")
-        task = loop.spawn(echo_server(conn, addr))
+    async with giambio.TaskManager(loop) as manager:
+        while True:
+            conn, addr = await asock.accept()
+            logging.info(f"{addr} connected")
+            task = manager.spawn(echo_server(conn, addr))
 
 
 async def echo_server(sock: AsyncSocket, addr: tuple):
@@ -41,4 +42,4 @@ async def echo_server(sock: AsyncSocket, addr: tuple):
 try:
     loop.start(make_srv, ('', 1501))
 except KeyboardInterrupt:      # Exceptions propagate!
-    pass
+    print("Exiting...")
