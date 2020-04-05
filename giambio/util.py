@@ -17,10 +17,14 @@ class TaskManager:
 
 
     async def _cancel_and_raise(self, exc):
-        self.loop._exiting = True   # Tells the loop not to catch all exceptions
-        for task in self.tasks:
-            await task.cancel()
-        raise exc
+        if not isinstance(exc, CancelledError):
+            self.loop._exiting = True   # Tells the loop not to catch all exceptions
+            try:
+                for task in self.tasks:
+                    await task.cancel()
+            except Exception:
+                pass
+            raise exc
 
     async def __aenter__(self):
         return self
@@ -30,8 +34,7 @@ class TaskManager:
             task = self.tasks.popleft()
             self.values[task] = await task.join()
             if task.result.exc:
-                if task.result.exc != CancelledError:
-                    await self._cancel_and_raise(task.result.exc)
+                await self._cancel_and_raise(task.result.exc)
 
     def spawn(self, coroutine: types.coroutine):
         """Schedules a task for execution, appending it to the call stack"""

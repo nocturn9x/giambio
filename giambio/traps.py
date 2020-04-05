@@ -74,4 +74,3 @@ def _cancel(task):
 
     task.cancelled = True
     yield "want_cancel", task
-
