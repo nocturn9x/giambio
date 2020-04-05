@@ -52,16 +52,26 @@ async def io_bound_task():
         sock = loop.wrap_socket(socket.socket())  # This returns a new AsyncSocket object
         await sock.connect(addr)
         res.append(await sock.receive(1024))  # Get some data and append it to a list
-        return res
+    return res
 
 async def main():
-    task = await giambio.spawn(io_bound_task())
-    task2 = await giambio.spawn(io_bound_task())  # Task object
-    # These two will execute concurrently!
+    async with giambio.TaskManager(loop) as manager:   # This is the only way to spawn tasks in giambio
+        task = await manager.spawn(io_bound_task())
+        task2 = await manager.spawn(io_bound_task())  # Task object
+        # These two will execute concurrently!
 
 loop.start(main)  # Note the absence of parentheses
 ```
 
-### TODO(s):
+### Explanation
 
-- Add an explanation for the code
+Ok, let's explain this code line by line:
+
+- First, we imported the required libraries
+- Then, we create our `EventLoop` object
+- For the sake of this tutorial, we are simulating a sort of scraper that fetches data from a page and returns a list of all the sites that it scraped
+- Here comes the real fun: In our `main` function, which is an `async` function, we used a Python 3 feature that might look weird and unfamiliar to newcomers (especially if you are used to asyncio or similar frameworks). Giambio takes advantage of the `async with` context manager to perform its magic: The `TaskManager` object is an ideal space where all tasks are spawned and run until they are done.
+The usage of the context manager ensures lots of cool things: For example, the context manager won't exit unless ALL the tasks inside it completed their execution, this also means that because tasks are always joined automatically you'll always get the return values of the coroutines and that exceptions will just **work as expected**.
+
+You don't even need to be inside the with block to spawn tasks! All you need is a reference to the object, `manager` in this case, so you can even pass it as a parameter to a function and spawn tasks from another coroutine and still get all the guarantees that giambio ensures
+
