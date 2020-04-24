@@ -1,6 +1,6 @@
 # giambio - Asynchronous Python made easy (and friendly)
 
-giambio is a Python framework that allows to perform I/O multiplexing and basically do more than one thing at once.
+giambio is an event-driven concurrency library suitable to perform efficient and high-performant I/O multiplexing.
 This library implements what is known as a stackless mode of execution, or "green threads", though the latter term is misleading as **no multithreading is involved** (at least not by default).
         
 
