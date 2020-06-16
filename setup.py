@@ -5,7 +5,7 @@ with open("README.md", "r") as readme:
 
 setuptools.setup(
     name="GiambIO",
-    version="0.0.1",
+    version="1.0",
     author="Nocturn9x aka IsGiambyy",
     author_email="hackhab@gmail.com",
     description="Asynchronous Python made easy (and friendly)",

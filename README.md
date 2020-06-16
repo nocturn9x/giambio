@@ -40,34 +40,31 @@ If you read carefully, you might now wonder: _"If a coroutine can call other cor
 Enough talking though, this is how a giambio based application looks like
 
 ```python
-
 import giambio
-from giambio.socket import AsyncSocket
 import socket
 import logging
 
-loop = giambio.EventLoop()
+sched = giambio.AsyncScheduler()
 
 logging.basicConfig(level=20,
                     format="[%(levelname)s] %(asctime)s %(message)s",
                     datefmt='%d/%m/%Y %p')
 
 
-async def make_srv(address: tuple):
+async def server(address: tuple):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(address)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.listen(5)
-    asock = loop.wrap_socket(sock)    # This creates a socket that can be read asynchronously
+    asock = sched.wrap_socket(sock)
     logging.info(f"Echo server serving asynchronously at {address}")
-    async with giambio.TaskManager(loop) as manager:
-        while True:
-            conn, addr = await asock.accept()
-            logging.info(f"{addr} connected")
-            task = manager.spawn(echo_server(conn, addr))   # This spawns a new task
+    while True:
+        conn, addr = await asock.accept()
+        logging.info(f"{addr} connected")
+        sched.create_task(echo_handler(conn, addr))
 
 
-async def echo_server(sock: AsyncSocket, addr: tuple):
+async def echo_handler(sock: AsyncSocket, addr: tuple):
     with sock:
         await sock.send_all(b"Welcome to the server pal!\n")
         while True:
@@ -82,10 +79,12 @@ async def echo_server(sock: AsyncSocket, addr: tuple):
     logging.info(f"Connection from {addr} closed")
 
 
-try:
-    loop.start(make_srv, ('', 1501))
-except KeyboardInterrupt:      # Because exceptions propagate
-    print("Exiting...")
+if __name__ == "__main__":
+    sched.create_task(server(('', 25000)))
+    try:
+        sched.run()
+    except KeyboardInterrupt:      # Exceptions propagate!
+        print("Exiting...")
 ```
 
 ### Explanation
@@ -93,30 +92,9 @@ except KeyboardInterrupt:      # Because exceptions propagate
 Ok, let's explain this code line by line:
 
 - First, we imported the required libraries
-- Then, we created an `EventLoop` object
+- Then, we created an `AsyncScheduler` object
 - For the sake of this tutorial, we built the "Hello world" of network servers, an echo server. An echo server always replies to the client with the same data that it got from it
-- Here comes the real fun: In our `make_srv` function, which is an `async` function, we used a Python 3 feature that might look weird and unfamiliar to newcomers (especially if you are used to asyncio or similar frameworks). Giambio takes advantage of the `async with` context manager to perform its magic: The `TaskManager` object is an ideal space where all tasks are spawned and run until they are done.
+- Here comes the real fun: In our `server` function, which is an `async` function, we used the `create_task` method of the scheduler object to spawn a new task. Pretty similar to the threaded model, but there are no threads involved!
 
-The usage of the context manager ensures lots of cool things: For example, the context manager won't exit unless _ALL the tasks inside it completed their execution_ (either cancelled, errored, or returned). This also means that because tasks are always joined automatically, you'll always get the return values of the coroutines and that exceptions will just **work as expected**.
+Try using the `netcat` utility to connect to the server and instantiate multiple sessions to the server, you'll see that they are all connected simultaneously.
 
-You don't even need to be inside the with block to spawn tasks! All you need is a reference to the `TaskManager` object, so you can even pass it as a parameter to a function and spawn tasks from another coroutine and still get all the guarantees that giambio ensures.
-
-## Cancellation, exception propagation and return values
-
-The only way to execute asynchronous code in giambio is trough a `TaskManager` (or one of its children classes) object used within an `async with` context manager. The `TaskManager` is an ideal "playground" where all asynchronous code runs and where the internal event loop of giambio can control its execution flow.
-
-The key feature of this mechanism is that all tasks are always joined automatically: You'll never see a task running outside of the controlled context that giambio enforces.
-
-Moreover, while most asynchronous frameworks out there would discard the return values from spawned tasks (in giambio "spawned" means that the coroutine was called using the `spawn()` or the `schedule()` method), here you'll never lose a single bit of information about your functions.
-    
-
-There are a few concepts to explain here, though:
-
- - The term "task" refers to a coroutine executed trough the `TaskManager`'s methods `spawn()` and `schedule()`, as well as one executed with ``await coro()``
- 
- - Because of how the framework was designed, an exception in any of the task(s) inside the ``TaskManager`` will trigger the internal cancellation mechanism of giambio. All other running tasks are cancelled, read more below, and the exception(s) that caused the cancellation will be propagated inside the parent task as if you were running synchronous code
- 
- - The concept of cancellation is a bit tricky, because there is no real way to stop a coroutine from executing without actually raising an exception inside it. So when giambio needs to cancel a task, it just throws `giambio.exceptions.CancelledError` inside it and hopes for the best.
- This exception inherits from `BaseException`, which by convention means that it should not be catched. Doing so in giambio will likely break your code and make it explode spectacularly; If you **really** want to catch it to perform some sort of cleanup, be sure to re-raise it when done.
- In general, when writing an asynchronous function in giambio, you should always bear in mind that it
- might be cancelled at any time and handle that case accordingly.

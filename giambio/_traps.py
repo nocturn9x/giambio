@@ -1,11 +1,12 @@
 """Helper methods to interact with the event loop"""
 
 import types
+from .exceptions import CancelledError
 import socket
 
 
 @types.coroutine
-def _sleep(seconds: int):
+def sleep(seconds: int):
     """Pause the execution of a coroutine for the passed amount of seconds,
     without blocking the entire event loop, which keeps watching for other events
 
@@ -20,33 +21,10 @@ def _sleep(seconds: int):
     :type seconds: int
     """
 
-    yield "want_sleep", seconds
-
-
-@types.coroutine
-def _want_read(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to read from the passed socket
-
-       :param sock: The socket to perform the operation on
-       :type sock: class: socket.socket
-    """
-
-    yield "want_read", sock
-
+    yield "sleep", seconds
 
 @types.coroutine
-def _want_write(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to write into the passed socket
-
-       :param sock: The socket to perform the operation on
-       :type sock: class: socket.socket
-    """
-
-    yield "want_write", sock
-
-
-@types.coroutine
-def _join(task, silent=False):
+def join(task, silent=False):
     """'Tells' the scheduler that the desired task MUST be awaited for completion
         If silent is True, any exception in the child task will be discarded
 
@@ -56,13 +34,11 @@ def _join(task, silent=False):
         :type silent: bool, optional
     """
 
-    task.joined = True
-    yield "want_join", task
-    return task.get_result(silent)
+    return (yield "join", task)
 
 
 @types.coroutine
-def _cancel(task):
+def cancel(task):
     """'Tells' the scheduler that the passed task must be cancelled
 
        The concept of cancellation here is tricky, because there is no real way to 'stop' a
@@ -72,5 +48,27 @@ def _cancel(task):
        be cancelled at any time
     """
 
-    task.cancelled = True
-    yield "want_cancel", task
+    yield "cancel", task
+
+
+@types.coroutine
+def want_read(sock: socket.socket):
+    """'Tells' the event loop that there is some coroutine that wants to read fr                                                                                   >
+
+       :param sock: The socket to perform the operation on
+       :type sock: class: socket.socket
+    """
+
+    yield "want_read", sock
+
+
+@types.coroutine
+def want_write(sock: socket.socket):
+    """'Tells' the event loop that there is some coroutine that wants to write i                                                                                   >
+
+       :param sock: The socket to perform the operation on
+       :type sock: class: socket.socket
+    """
+
+    yield "want_write", sock
+
