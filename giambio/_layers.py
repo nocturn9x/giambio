@@ -28,6 +28,11 @@ class Task:
 
         await cancel(self)
 
+    def result(self):
+        if self.exc:
+            raise self.exc
+        return self.result
+
     def __repr__(self):
         """Implements repr(self)"""
 

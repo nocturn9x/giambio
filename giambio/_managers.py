@@ -2,8 +2,6 @@ from collections import deque
 import types
 from ._layers import Task
 from heapq import heappush
-from ._traps import sleep
-import time
 
 
 class TaskManager:
@@ -27,8 +25,6 @@ class TaskManager:
         so that the internal loop can proceed with execution.
         In general, when writing an asynchronous function, you should always consider that it might be cancelled at any time and handle that case accordingly.
     """
-
-
 
     def __init__(self, loop):
         self.values = {}   # Results from each task

@@ -1,7 +1,6 @@
 """Helper methods to interact with the event loop"""
 
 import types
-from .exceptions import CancelledError
 import socket
 
 
@@ -23,6 +22,7 @@ def sleep(seconds: int):
 
     yield "sleep", seconds
 
+
 @types.coroutine
 def join(task):
     """'Tells' the scheduler that the desired task MUST be awaited for completion
@@ -33,7 +33,8 @@ def join(task):
 
     yield "join", task
     assert task.finished
-    return task.result
+    return task.result()
+
 
 @types.coroutine
 def cancel(task):
@@ -49,9 +50,10 @@ def cancel(task):
     yield "cancel", task
     assert task.cancelled
 
+
 @types.coroutine
 def want_read(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to read fr                                                                                   >
+    """'Tells' the event loop that there is some coroutine that wants to read from the given socket
 
        :param sock: The socket to perform the operation on
        :type sock: class: socket.socket
@@ -62,7 +64,7 @@ def want_read(sock: socket.socket):
 
 @types.coroutine
 def want_write(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to write i                                                                                   >
+    """'Tells' the event loop that there is some coroutine that wants to write on the given socket
 
        :param sock: The socket to perform the operation on
        :type sock: class: socket.socket

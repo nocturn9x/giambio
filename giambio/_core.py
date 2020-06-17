@@ -3,54 +3,57 @@ from collections import deque
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from heapq import heappush, heappop
 import socket
-from .exceptions import AlreadyJoinedError, CancelledError, GiambioError
+from .exceptions import AlreadyJoinedError, CancelledError
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket, WantRead, WantWrite
+from .socket import AsyncSocket, WantWrite
 from ._layers import Task
 from socket import SOL_SOCKET, SO_ERROR
-from ._traps import join, sleep, want_read, want_write, cancel
+from ._traps import want_read, want_write
 
 
 class AsyncScheduler:
-
     """Implementation of an event loop, alternates between execution of coroutines (asynchronous functions)
     to allow a concurrency model or 'green threads'"""
 
     def __init__(self):
         """Object constructor"""
 
-        self.to_run = deque()  # Scheduled tasks
-        self.paused = []  # Sleeping tasks
+        self.to_run = deque()  # Tasks that are ready to run
+        self.paused = []  # Tasks that are asleep
         self.selector = DefaultSelector()  # Selector object to perform I/O multiplexing
         self.running = None  # This will always point to the currently running coroutine (Task object)
-        self.joined = {}  # Tasks that want to join
-        self.clock = default_timer  # Monotonic clock to keep track of elapsed time
-        self.sequence = 0  # To avoid TypeError in the (unlikely) event of two task with the same deadline we use a unique and incremental integer pushed to the queue together with the deadline and the function itself
+        self.joined = {}  # Maps child tasks that need to be joined their respective parent task
+        self.clock = default_timer  # Monotonic clock to keep track of elapsed time reliably
+        self.sequence = 0  # A monotonically increasing ID to avoid some corner cases with deadlines comparison
 
     def run(self):
-        """Main event loop for giambio"""
+        """Starts the loop and 'listens' for events until there are either ready or asleep tasks
+        then exit. This behavior kinda reflects a kernel, as coroutines can request
+        the loop's functionality only trough some fixed entry points, which in turn yield and
+        give execution control to the loop itself."""
 
         while True:
             if not self.selector.get_map() and not any(deque(self.paused) + self.to_run):
                 break
             if not self.to_run and self.paused:  # If there are sockets ready, (re)schedule their associated task
-                wait(max(0.0, self.paused[0][0] - self.clock()))  # If there are no tasks ready, just do nothing
-                while self.paused[0][0] < self.clock():  # Reschedules task when their timer has elapsed
-                   _, __, coro = heappop(self.paused)
-                   self.to_run.append(coro)
-                   if not self.paused:
-                       break
+                wait(max(0.0, self.paused[0][0] - self.clock()))  # Sleep in order not to waste CPU cycles
+                while self.paused[0][0] < self.clock():  # Reschedules task when their deadline has elapsed
+                    _, __, task = heappop(self.paused)
+                    self.to_run.append(task)
+                    if not self.paused:
+                        break
             timeout = 0.0 if self.to_run else None
             tasks = self.selector.select(timeout)
             for key, _ in tasks:
                 self.to_run.append(key.data)  # Socket ready? Schedule the task
-                self.selector.unregister(key.fileobj)  # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)
+                self.selector.unregister(
+                    key.fileobj)  # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)
             while self.to_run:
                 self.running = self.to_run.popleft()  # Sets the currently running task
                 try:
                     method, *args = self.running.run()
-                    getattr(self, method)(*args)   # Sneaky method call, thanks to David Beazley for this ;)
+                    getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
                 except StopIteration as e:
                     e = e.args[0] if e.args else None
                     self.running.result = e
@@ -88,6 +91,31 @@ class AsyncScheduler:
 
         self.selector.register(sock, EVENT_WRITE, self.running)
 
+    def join(self, coro: types.coroutine):
+        """Handler for the 'join' event, does some magic to tell the scheduler
+        to wait until the passed coroutine ends. The result of this call equals whatever the
+        coroutine returns or, if an exception gets raised, the exception will get propagated inside the
+        parent task"""
+
+        if coro not in self.joined:
+            self.joined[coro] = self.running
+        else:
+            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+
+    def sleep(self, seconds):
+        """Puts a task to sleep"""
+
+        self.sequence += 1
+        heappush(self.paused, (self.clock() + seconds, self.sequence, self.running))
+        self.running = None
+
+    def cancel(self, task):
+        """Handler for the 'cancel' event, throws CancelledError inside a coroutine
+        in order to stop it from executing. The loop continues to execute as tasks
+        are independent"""
+
+        task.coroutine.throw(CancelledError)
+
     def wrap_socket(self, sock):
         """Wraps a standard socket into an AsyncSocket object"""
 
@@ -123,44 +151,13 @@ class AsyncScheduler:
         await want_write(sock)
         return sock.close()
 
-    def join(self, coro: types.coroutine):
-        """Handler for the 'want_join' event, does some magic to tell the scheduler
-        to wait until the passed coroutine ends. The result of this call equals whatever the
-        coroutine returns or, if an exception gets raised, the exception will get propagated inside the
-        parent task"""
-
-
-        if coro not in self.joined:
-            self.joined[coro] = self.running
-        else:
-            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
-
-    def sleep(self, seconds):
-        """Puts a task to sleep"""
-
-        self.sequence += 1   # Make this specific sleeping task unique to avoid error when comparing identical deadlines
-        heappush(self.paused, (self.clock() + seconds, self.sequence, self.running))
-        self.running = None
-
-    def cancel(self, task):
-        """Cancels a task"""
-
-        task.coroutine.throw(CancelledError)
-
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         """Connects a socket asynchronously"""
 
-        try:			# "Borrowed" from curio
+        try:  # "Borrowed" from curio
             return sock.connect(addr)
         except WantWrite:
             await want_write(sock)
         err = sock.getsockopt(SOL_SOCKET, SO_ERROR)
         if err != 0:
             raise OSError(err, f'Connect call failed: {addr}')
-
-    def create_task(self, coro: types.coroutine):
-        """Creates a task and appends it to call stack"""
-
-        task = Task(coro)
-        self.to_run.append(task)
-        return task

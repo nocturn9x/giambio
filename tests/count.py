@@ -1,5 +1,4 @@
 from giambio import AsyncScheduler, sleep, TaskManager
-import time
 
 
 async def countdown(n: int):
