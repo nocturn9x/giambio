@@ -1,6 +1,6 @@
 import types
 from ._traps import join, sleep, cancel
-from .exceptions import CancelledError
+
 
 class Task:
 
@@ -8,8 +8,10 @@ class Task:
 
     def __init__(self, coroutine: types.coroutine):
         self.coroutine = coroutine
-        self.joined = False   # True if the task is joined
         self.cancelled = False   # True if the task gets cancelled
+        self.exc = None
+        self.result = None
+        self.finished = False
 
     def run(self):
         """Simple abstraction layer over the coroutines ``send`` method"""
@@ -26,3 +28,7 @@ class Task:
 
         await cancel(self)
 
+    def __repr__(self):
+        """Implements repr(self)"""
+
+        return f"Task({self.coroutine}, cancelled={self.cancelled}, exc={repr(self.exc)}, result={self.result}, finished={self.finished})"

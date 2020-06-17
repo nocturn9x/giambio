@@ -1,4 +1,4 @@
-from giambio import AsyncScheduler, sleep, CancelledError
+from giambio import AsyncScheduler, sleep, TaskManager
 import time
 
 
@@ -7,6 +7,8 @@ async def countdown(n: int):
         print(f"Down {n}")
         n -= 1
         await sleep(1)
+        if n == 5:
+            raise ValueError('lul')
     print("Countdown over")
 
 
@@ -20,14 +22,10 @@ async def countup(stop, step: int or float = 1):
 
 
 async def main():
-    counter = scheduler.create_task(countup(5, 4))
-    counter2 = scheduler.create_task(countdown(20))
-    print("Counters started, awaiting completion")
-    await sleep(4)
-    print("4 seconds have passed, killing countup task")
-    await counter.cancel()
-    await counter.join()
-    await counter2.join()
+    async with TaskManager(scheduler) as manager:
+        manager.spawn(countdown(10))
+        manager.spawn(countup(5, 2))
+        print("Counters started, awaiting completion")
     print("Task execution complete")
 
 if __name__ == "__main__":
