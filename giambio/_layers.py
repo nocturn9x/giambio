@@ -1,5 +1,5 @@
 import types
-from ._traps import join, sleep, cancel
+from ._traps import join, cancel
 
 
 class Task:
@@ -13,10 +13,15 @@ class Task:
         self.result = None
         self.finished = False
 
-    def run(self):
+    def run(self, what=None):
         """Simple abstraction layer over the coroutines ``send`` method"""
 
-        return self.coroutine.send(None)
+        return self.coroutine.send(what)
+
+    def throw(self, err: Exception):
+        """Simple abstraction layer over the coroutines ``throw`` method"""
+
+        return self.coroutine.throw(err)
 
     async def join(self):
         """Joins the task"""
@@ -27,11 +32,6 @@ class Task:
         """Cancels the task"""
 
         await cancel(self)
-
-    def result(self):
-        if self.exc:
-            raise self.exc
-        return self.result
 
     def __repr__(self):
         """Implements repr(self)"""

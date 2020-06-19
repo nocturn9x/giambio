@@ -32,8 +32,7 @@ def join(task):
     """
 
     yield "join", task
-    assert task.finished
-    return task.result()
+    return task.result
 
 
 @types.coroutine

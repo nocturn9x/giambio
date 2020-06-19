@@ -17,11 +17,10 @@ async def server(address: tuple):
     sock.listen(5)
     asock = sched.wrap_socket(sock)
     logging.info(f"Echo server serving asynchronously at {address}")
-    async with giambio.TaskManager(sched) as manager:
-        while True:
-            conn, addr = await asock.accept()
-            logging.info(f"{addr} connected")
-            manager.spawn(echo_handler(conn, addr))
+    while True:
+        conn, addr = await asock.accept()
+        logging.info(f"{addr} connected")
+        task = sched.create_task(echo_handler(conn, addr))
 
 
 async def echo_handler(sock: AsyncSocket, addr: tuple):
