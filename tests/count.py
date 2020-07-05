@@ -6,8 +6,6 @@ async def countdown(n: int):
         print(f"Down {n}")
         n -= 1
         await sleep(1)
-        if n == 5:
-           raise ValueError('lul')
     print("Countdown over")
 
 
@@ -21,17 +19,17 @@ async def countup(stop, step: int or float = 1):
 
 
 async def main():
-    cup = scheduler.create_task(countdown(10))
-    cdown = scheduler.create_task(countup(5, 2))
+    cdown = scheduler.create_task(countdown(10))
+    cup = scheduler.create_task(countup(5, 2))
     print("Counters started, awaiting completion")
+    await sleep(2)
+    print("Slept 1 second, killing countdown")
+    await cdown.cancel()
     await cup.join()
     await cdown.join()
     print("Task execution complete")
 
 if __name__ == "__main__":
     scheduler = AsyncScheduler()
-    try:
-        scheduler.start(main())
-    except Exception:
-        print("main() errored!")
+    scheduler.start(main())
 
