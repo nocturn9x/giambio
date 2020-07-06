@@ -1,17 +1,17 @@
 """
-   Copyright (C) 2020 nocturn9x
+Copyright (C) 2020 nocturn9x
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+   http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
 
 # Import libraries and internal resources
@@ -68,30 +68,28 @@ class AsyncScheduler:
                     if not self.paused:
                         break
             timeout = 0.0 if self.tasks else None  # If there are no tasks ready wait indefinitely
-            tasks = self.selector.select(timeout)    # Get sockets that are ready and schedule their tasks
-            for key, _ in tasks:
+            io_ready = self.selector.select(timeout)    # Get sockets that are ready and schedule their tasks
+            for key, _ in io_ready:
                 self.tasks.append(key.data)  # Socket ready? Schedule the task
                 self.selector.unregister(
-                    key.fileobj)  # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)
+                    key.fileobj) # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)
             while self.tasks:    # While there are tasks to run
                 self.current_task = self.tasks.popleft()  # Sets the currently running task
+                self.current_task.status = "run"
                 try:
                     method, *args = self.current_task.run()   # Run a single step with the calculation
                     getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
                 except CancelledError as cancelled:    # Coroutine was cancelled
                     task = cancelled.args[0]
                     task.cancelled = True
-                    self.reschedule_parent()
-                    self.tasks.append(self.current_task)
-                except RuntimeError:
-                    self.reschedule_parent()
+                    self.tasks.remove(task)
                 except StopIteration as e:   # Coroutine ends
                     self.current_task.result = e.args[0] if e.args else None
                     self.current_task.finished = True
-                    self.reschedule_parent()
-                except Exception as error:    # Coroutine raised
+                    self.reschedule_parent(self.current_task)
+                except BaseException as error:    # Coroutine raised
                     self.current_task.exc = error
-                    self.reschedule_parent()
+                    self.reschedule_parent(self.current_task)
                     raise  # Maybe find a better way to propagate errors?
 
 
@@ -109,12 +107,13 @@ class AsyncScheduler:
         self.create_task(coro)
         self.run()
 
-    def reschedule_parent(self):
+    def reschedule_parent(self, coro):
         """Reschedules the parent task"""
 
-        popped = self.joined.pop(self.current_task, None)
+        popped = self.joined.pop(coro, None)
         if popped:
             self.tasks.append(popped)
+        return popped
 
     def want_read(self, sock: socket.socket):
         """Handler for the 'want_read' event, registers the socket inside the selector to perform I/0 multiplexing"""
@@ -139,14 +138,14 @@ class AsyncScheduler:
         if busy:
             raise ResourceBusy("The given resource is busy!")
 
-    def join(self, coro: types.coroutine):
+    def join(self, child: types.coroutine):
         """Handler for the 'join' event, does some magic to tell the scheduler
         to wait until the passed coroutine ends. The result of this call equals whatever the
         coroutine returns or, if an exception gets raised, the exception will get propagated inside the
         parent task"""
 
-        if coro not in self.joined:
-            self.joined[coro] = self.current_task
+        if child not in self.joined:
+            self.joined[child] = self.current_task
         else:
             raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
@@ -154,6 +153,7 @@ class AsyncScheduler:
         """Puts the caller to sleep for a given amount of seconds"""
 
         self.sequence += 1
+        self.current_task.status = "sleep"
         heappush(self.paused, (self.clock() + seconds, self.sequence, self.current_task))
 
     def cancel(self, task):
@@ -161,6 +161,7 @@ class AsyncScheduler:
         in order to stop it from executing. The loop continues to execute as tasks
         are independent"""
 
+        self.reschedule_parent(task)
         task.throw(CancelledError(task))
 
     def wrap_socket(self, sock):

@@ -33,7 +33,7 @@ giambio has been designed with simplicity in mind, so this README won't go deep 
 
 Just to clarify things, giambio does not avoid the Global Interpreter Lock nor it performs any sort of multithreading or multiprocessing (at least by default). Remember that **concurrency is not parallelism**, concurrent tasks will switch back and forth and proceed with their calculations but won't be running independently like they would do if they were forked off to a process pool. That's why it is called concurrency, because multiple tasks **concur** for the same amount of resources. (Which is basically the same thing that happens inside your CPU at a much lower level, because processors run many more tasks than their actual number of cores)
 
-If you read carefully, you might now wonder: _"If a coroutine can call other coroutines, but synchronous functions cannot, how do I enter the async context in the first place?"_. This is done trough a special **synchronous function** (the `start()` method of an `EventLoop` object in our case) which can call asynchronous ones, that **must** be called from a synchronous context to avoid a horrible *deadlock*.
+If you read carefully, you might now wonder: _"If a coroutine can call other coroutines, but synchronous functions cannot, how do I enter the async context in the first place?"_. This is done trough a special **synchronous function** (the `start` method of an `AsyncScheduler` object in our case) which can call asynchronous ones, that **must** be called from a synchronous context to avoid a horrible *deadlock*.
 
 ## Let's code
 
@@ -80,9 +80,8 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
 
 
 if __name__ == "__main__":
-    sched.create_task(server(('', 25000)))
     try:
-        sched.run()
+        sched.start(server(('', 25000)))
     except KeyboardInterrupt:      # Exceptions propagate!
         print("Exiting...")
 ```

@@ -28,6 +28,7 @@ class Task:
         self.exc = None
         self.result = None
         self.finished = False
+        self.status = "init"
 
     def run(self, what=None):
         """Simple abstraction layer over the coroutines ``send`` method"""
@@ -52,4 +53,4 @@ class Task:
     def __repr__(self):
         """Implements repr(self)"""
 
-        return f"Task({self.coroutine}, cancelled={self.cancelled}, exc={repr(self.exc)}, result={self.result}, finished={self.finished})"
+        return f"Task({self.coroutine}, cancelled={self.cancelled}, exc={repr(self.exc)}, result={self.result}, finished={self.finished}, status={self.status})"
