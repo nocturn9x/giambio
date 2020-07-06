@@ -20,6 +20,7 @@ limitations under the License.
 
 import socket
 from .exceptions import ResourceClosed
+from ._traps import sleep
 try:
     from ssl import SSLWantReadError, SSLWantWriteError
     WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
@@ -74,6 +75,7 @@ class AsyncSocket(object):
     async def close(self):
         """Closes the socket asynchronously"""
 
+        await sleep(0)   # Give the scheduler the time to unregister the socket first
         await self.loop.close_sock(self.sock)
 
     async def connect(self, addr: tuple):

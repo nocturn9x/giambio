@@ -92,7 +92,6 @@ class AsyncScheduler:
                     self.reschedule_parent(self.current_task)
                     raise  # Maybe find a better way to propagate errors?
 
-
     def create_task(self, coro: types.coroutine):
         """Spawns a child task"""
 
@@ -128,7 +127,6 @@ class AsyncScheduler:
 
     def want_write(self, sock: socket.socket):
         """Handler for the 'want_write' event, registers the socket inside the selector to perform I/0 multiplexing"""
-
 
         busy = False
         try:
