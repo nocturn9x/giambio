@@ -16,6 +16,7 @@ limitations under the License.
 
 import types
 from ._traps import join, cancel, event_set, event_wait
+from heapq import heappop, heappush
 
 class Task:
 
@@ -85,3 +86,37 @@ class Event:
         if not self._timeout_expired:
             self.event_caught = True
         return msg
+
+
+class TimeQueue:
+    """An abstraction layer over a heap queue based on time. This is where
+       sleeping tasks will be put when they are asleep"""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.sequence = 0
+        self.container = []
+
+    def __contains__(self, item):
+        return item in self.container
+
+    def __iter__(self):
+        return iter(self.container)
+
+    def __getitem__(self, item):
+        return self.container.__getitem__(item)
+
+    def __bool__(self):
+        return bool(self.container)
+
+    def __repr__(self):
+        return f"TimeQueue({self.container}, clock={self.clock})"
+
+    def put(self, item, amount):
+        heappush(self.container, (self.clock() + amount, self.sequence, item))
+        self.sequence += 1
+
+    def get(self):
+        return heappop(self.container)[2]
+
+
