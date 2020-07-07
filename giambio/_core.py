@@ -63,31 +63,40 @@ class AsyncScheduler:
                 break
             if not self.tasks:
                 if self.paused:  # If there are no actively running tasks, we try to schedule the asleep ones
-                    self.check_sleeping()
-            if self.selector.get_map():
-                self.check_io()
-            while self.tasks:    # While there are tasks to run
-                self.current_task = self.tasks.popleft()  # Sets the currently running task
-                if self.current_task.status == "cancel":  # Deferred cancellation
-                    self.current_task.cancelled = True
-                    self.current_task.throw(CancelledError)
-                else:
-                    self.current_task.status = "run"
                     try:
-                        method, *args = self.current_task.run(self.current_task._notify)   # Run a single step with the calculation
-                        getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
-                        if self.event_waiting:
-                            self.check_events()
-                    except CancelledError as cancelled:
-                        self.tasks.remove(cancelled.args[0])
-                    except StopIteration as e:   # Coroutine ends
-                        self.current_task.result = e.args[0] if e.args else None
-                        self.current_task.finished = True
-                        self.reschedule_parent(self.current_task)
-                    except BaseException as error:    # Coroutine raised
+                        self.check_sleeping()
+                    except BaseException as error:
                         self.current_task.exc = error
                         self.reschedule_parent(self.current_task)
                         raise  # Maybe find a better way to propagate errors?
+            if self.selector.get_map():
+                try:
+                    self.check_io()
+                except BaseException as error:
+                    self.current_task.exc = error
+                    self.reschedule_parent(self.current_task)
+                    raise  # Maybe find a better way to propagate errors?
+            while self.tasks:    # While there are tasks to run
+                self.current_task = self.tasks.popleft()  # Sets the currently running task
+                try:
+                    if self.current_task.status == "cancel":  # Deferred cancellation
+                        self.current_task.cancelled = True
+                        self.current_task.throw(CancelledError)
+                    method, *args = self.current_task.run(self.current_task._notify)   # Run a single step with the calculation (and awake event-waiting tasks if any)
+                    self.current_task.status = "run"
+                    getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
+                    if self.event_waiting:
+                        self.check_events()
+                except CancelledError as cancelled:
+                    self.tasks.remove(cancelled.args[0])   # Remove the dead task
+                except StopIteration as e:   # Coroutine ends
+                    self.current_task.result = e.args[0] if e.args else None
+                    self.current_task.finished = True
+                    self.reschedule_parent(self.current_task)
+                except BaseException as error:    # Coroutine raised
+                    self.current_task.exc = error
+                    self.reschedule_parent(self.current_task)
+                    raise  # Maybe find a better way to propagate errors?
 
     def check_events(self):
         """Checks for ready or expired events and triggers them"""
@@ -189,10 +198,11 @@ class AsyncScheduler:
 
         if child.finished:
             self.tasks.append(self.current_task)
-        if child not in self.joined:
-            self.joined[child] = self.current_task
         else:
-            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+           if child not in self.joined:
+                self.joined[child] = self.current_task
+           else:
+                raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
     def sleep(self, seconds: int or float):
         """Puts the caller to sleep for a given amount of seconds"""
