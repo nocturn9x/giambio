@@ -37,57 +37,46 @@ class AsyncSocket(object):
         self.sock = sock
         self.sock.setblocking(False)
         self.loop = loop
+        self._closed = False
 
     async def receive(self, max_size: int):
         """Receives up to max_size from a socket asynchronously"""
 
-        closed = False
-        try:
-            return await self.loop.read_sock(self.sock, max_size)
-        except OSError:
-            closed = True
-        if closed:
+        if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
+        self.loop.current_task.status = "I/O"
+        return await self.loop.read_sock(self.sock, max_size)
 
     async def accept(self):
         """Accepts the socket, completing the 3-step TCP handshake asynchronously"""
 
-        closed = False
-        try:
-            to_wrap = await self.loop.accept_sock(self.sock)
-            return self.loop.wrap_socket(to_wrap[0]), to_wrap[1]
-        except OSError:
-            closed = True
-        if closed:
+        if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
+        to_wrap = await self.loop.accept_sock(self.sock)
+        return self.loop.wrap_socket(to_wrap[0]), to_wrap[1]
 
     async def send_all(self, data: bytes):
         """Sends all data inside the buffer asynchronously until it is empty"""
 
-        closed = False
-        try:
-            return await self.loop.sock_sendall(self.sock, data)
-        except OSError:
-            closed = True
-        if closed:
+        if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
+        return await self.loop.sock_sendall(self.sock, data)
 
     async def close(self):
         """Closes the socket asynchronously"""
 
+        if self._closed:
+            raise ResourceClosed("I/O operation on closed socket")
         await sleep(0)   # Give the scheduler the time to unregister the socket first
         await self.loop.close_sock(self.sock)
+        self._closed = True
 
     async def connect(self, addr: tuple):
         """Connects the socket to an endpoint"""
 
-        closed = False
-        try:
-            await self.loop.connect_sock(self.sock, addr)
-        except OSError:
-            closed = True
-        if closed:
+        if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
+        await self.loop.connect_sock(self.sock, addr)
 
     def __enter__(self):
         return self.sock.__enter__()

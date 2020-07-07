@@ -23,7 +23,7 @@ import socket
 from .exceptions import AlreadyJoinedError, CancelledError, ResourceBusy
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket, WantWrite
+from .socket import AsyncSocket, WantWrite, WantRead
 from ._layers import Task
 from socket import SOL_SOCKET, SO_ERROR
 from ._traps import want_read, want_write
@@ -50,6 +50,8 @@ class AsyncScheduler:
         self.joined = {}  # Maps child tasks that need to be joined their respective parent task
         self.clock = default_timer  # Monotonic clock to keep track of elapsed time reliably
         self.sequence = 0  # A monotonically increasing ID to avoid some corner cases with deadlines comparison
+        self.events = {}   # All Event objects
+        self.event_waiting = {}  # Coroutines waiting on event objects
 
     def run(self):
         """Starts the loop and 'listens' for events until there are either ready or asleep tasks
@@ -58,39 +60,69 @@ class AsyncScheduler:
         give execution control to the loop itself."""
 
         while True:
-            if not self.selector.get_map() and not any([self.paused, self.tasks]):   # If there is nothing to do, just exit
+            if not self.selector.get_map() and not any([self.paused, self.tasks, self.event_waiting]):   # If there is nothing to do, just exit
                 break
-            if not self.tasks and self.paused:  # If there are no actively running tasks, we try to schedule the asleep ones
-                wait(max(0.0, self.paused[0][0] - self.clock()))  # Sleep until the closest deadline in order not to waste CPU cycles
-                while self.paused[0][0] < self.clock():  # Reschedules tasks when their deadline has elapsed
-                    _, __, task = heappop(self.paused)
-                    self.tasks.append(task)
-                    if not self.paused:
-                        break
-            timeout = 0.0 if self.tasks else None  # If there are no tasks ready wait indefinitely
-            io_ready = self.selector.select(timeout)    # Get sockets that are ready and schedule their tasks
-            for key, _ in io_ready:
-                self.tasks.append(key.data)  # Socket ready? Schedule the task
-                self.selector.unregister(
-                    key.fileobj) # Once (re)scheduled, the task does not need to perform I/O multiplexing (for now)
+            if not self.tasks:
+                if self.paused:  # If there are no actively running tasks, we try to schedule the asleep ones
+                    self.check_sleeping()
+            if self.selector.get_map():
+                self.check_io()
             while self.tasks:    # While there are tasks to run
                 self.current_task = self.tasks.popleft()  # Sets the currently running task
-                self.current_task.status = "run"
-                try:
-                    method, *args = self.current_task.run()   # Run a single step with the calculation
-                    getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
-                except CancelledError as cancelled:    # Coroutine was cancelled
-                    task = cancelled.args[0]
-                    task.cancelled = True
-                    self.tasks.remove(task)
-                except StopIteration as e:   # Coroutine ends
-                    self.current_task.result = e.args[0] if e.args else None
-                    self.current_task.finished = True
-                    self.reschedule_parent(self.current_task)
-                except BaseException as error:    # Coroutine raised
-                    self.current_task.exc = error
-                    self.reschedule_parent(self.current_task)
-                    raise  # Maybe find a better way to propagate errors?
+                if self.current_task.status == "cancel":  # Deferred cancellation
+                    self.current_task.cancelled = True
+                    self.current_task.throw(CancelledError)
+                else:
+                    self.current_task.status = "run"
+                    try:
+                        method, *args = self.current_task.run(self.current_task._notify)   # Run a single step with the calculation
+                        getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
+                        if self.event_waiting:
+                            self.check_events()
+                    except CancelledError as cancelled:
+                        self.tasks.remove(cancelled.args[0])
+                    except StopIteration as e:   # Coroutine ends
+                        self.current_task.result = e.args[0] if e.args else None
+                        self.current_task.finished = True
+                        self.reschedule_parent(self.current_task)
+                    except BaseException as error:    # Coroutine raised
+                        self.current_task.exc = error
+                        self.reschedule_parent(self.current_task)
+                        raise  # Maybe find a better way to propagate errors?
+
+    def check_events(self):
+        """Checks for ready or expired events and triggers them"""
+
+        for event, (timeout, _, task) in self.event_waiting.copy().items():
+            if event._set:
+                task._notify = event._notify
+                self.tasks.append(task)
+                self.tasks.append(event.notifier)
+                self.event_waiting.pop(event)
+            elif timeout and self.clock() > timeout:
+                event._timeout_expired = True
+                event._notify = task._notify = None
+                self.tasks.append(task)
+                self.tasks.append(event.notifier)
+                self.event_waiting.pop(event)
+
+    def check_sleeping(self):
+        """Checks and reschedules sleeping tasks"""
+
+        wait(max(0.0, self.paused[0][0] - self.clock()))  # Sleep until the closest deadline in order not to waste CPU cycles
+        while self.paused[0][0] < self.clock():  # Reschedules tasks when their deadline has elapsed
+            _, __, task = heappop(self.paused)
+            self.tasks.append(task)
+            if not self.paused:
+                break
+
+    def check_io(self):
+        """Checks and schedules task to perform I/O"""
+
+        timeout = 0.0 if self.tasks else None  # If there are no tasks ready wait indefinitely
+        io_ready = self.selector.select(timeout)    # Get sockets that are ready and schedule their tasks
+        for key, _ in io_ready:
+            self.tasks.append(key.data)  # Socket ready? Schedule the task
 
     def create_task(self, coro: types.coroutine):
         """Spawns a child task"""
@@ -109,15 +141,23 @@ class AsyncScheduler:
     def reschedule_parent(self, coro):
         """Reschedules the parent task"""
 
-        popped = self.joined.pop(coro, None)
-        if popped:
-            self.tasks.append(popped)
-        return popped
+        parent = self.joined.pop(coro, None)
+        if parent:
+            assert parent not in self.tasks
+            self.tasks.append(parent)
+        return parent
 
     def want_read(self, sock: socket.socket):
         """Handler for the 'want_read' event, registers the socket inside the selector to perform I/0 multiplexing"""
 
+        self.current_task.status = "I/O"
+        if self.current_task._last_io:
+            if self.current_task._last_io == ("READ", sock):
+                return    # Socket is already scheduled!
+            else:
+                self.selector.unregister(sock)
         busy = False
+        self.current_task._last_io = "READ", sock
         try:
             self.selector.register(sock, EVENT_READ, self.current_task)
         except KeyError:
@@ -128,7 +168,14 @@ class AsyncScheduler:
     def want_write(self, sock: socket.socket):
         """Handler for the 'want_write' event, registers the socket inside the selector to perform I/0 multiplexing"""
 
+        self.current_task.status = "I/O"
+        if self.current_task._last_io:
+            if self.current_task._last_io == ("WRITE", sock):
+                return    # Socket is already scheduled!
+            else:
+                self.selector.unregister(sock)  # modify() causes issues
         busy = False
+        self.current_task._last_io = "WRITE", sock
         try:
             self.selector.register(sock, EVENT_WRITE, self.current_task)
         except KeyError:
@@ -142,25 +189,52 @@ class AsyncScheduler:
         coroutine returns or, if an exception gets raised, the exception will get propagated inside the
         parent task"""
 
+        if child.finished:
+            self.tasks.append(self.current_task)
         if child not in self.joined:
             self.joined[child] = self.current_task
         else:
             raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
-    def sleep(self, seconds):
+    def sleep(self, seconds: int or float):
         """Puts the caller to sleep for a given amount of seconds"""
 
+        if seconds:
+            self.sequence += 1
+            self.current_task.status = "sleep"
+            heappush(self.paused, (self.clock() + seconds, self.sequence, self.current_task))
+
+    def event_set(self, event, value):
+        """Sets an event"""
+
+        event.notifier = self.current_task
+        self.events[event] = value
+
+    def event_wait(self, event, timeout):
+        """Waits for an event"""
+
         self.sequence += 1
-        self.current_task.status = "sleep"
-        heappush(self.paused, (self.clock() + seconds, self.sequence, self.current_task))
+        if timeout:
+            timeout = self.clock() + timeout
+        else:
+            timeout = 0
+        if self.events.get(event, None):
+            return self.events.pop(event)
+        else:
+            self.event_waiting[event] = timeout, self.sequence, self.current_task
+            self.event_waiting = dict(sorted(self.event_waiting.items()))
 
     def cancel(self, task):
         """Handler for the 'cancel' event, throws CancelledError inside a coroutine
         in order to stop it from executing. The loop continues to execute as tasks
         are independent"""
 
-        self.reschedule_parent(task)
-        task.throw(CancelledError(task))
+        if task.status in ("sleep", "I/O") and not task.cancelled:  # It is safe to cancel a task while blocking
+            task.cancelled = True
+            task.throw(CancelledError(task))
+        elif task.status == "run":
+            task.status = "cancel"
+        self.reschedule_parent()
 
     def wrap_socket(self, sock):
         """Wraps a standard socket into an AsyncSocket object"""
