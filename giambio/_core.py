@@ -102,14 +102,15 @@ class AsyncScheduler:
         """Checks for ready or expired events and triggers them"""
 
         for event, (timeout, _, task) in self.event_waiting.copy().items():
-            if event._set:
-                task._notify = event._notify
+            if timeout and self.clock() > timeout:
+                event._timeout_expired = True
+                event._notify = task._notify = None
                 self.tasks.append(task)
                 self.tasks.append(event.notifier)
                 self.event_waiting.pop(event)
-            elif timeout and self.clock() > timeout:
-                event._timeout_expired = True
-                event._notify = task._notify = None
+            elif event._set:
+                event.event_caught = True
+                task._notify = event._notify
                 self.tasks.append(task)
                 self.tasks.append(event.notifier)
                 self.event_waiting.pop(event)
@@ -217,6 +218,8 @@ class AsyncScheduler:
         """Sets an event"""
 
         event.notifier = self.current_task
+        event._set = True
+        event._notify = value
         self.events[event] = value
 
     def event_wait(self, event, timeout):

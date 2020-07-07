@@ -8,11 +8,10 @@ async def child(notifier: giambio.Event, timeout: int):
     else:
         print("[child] Waiting for events")
     notification = await notifier.pause(timeout=timeout)
-    if notifier._timeout_expired:
+    if not notifier.event_caught:
         print("[child] Parent was too slow!")
     else:
         print(f"[child] Parent said: {notification}")
-
 
 async def parent(pause: int = 1, child_timeout: int = 0):
     event = giambio.Event(scheduler)

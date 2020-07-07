@@ -75,18 +75,12 @@ class Event:
         """Sets the event, optionally taking a value. This can be used
            to control tasks' flow by 'sending' commands back and fort"""
 
-        self._set = True
-        self._notify = value
         await event_set(self, value)
 
     async def pause(self, timeout=0):
         """Waits until the event is set and returns a value"""
 
-        msg = await event_wait(self, timeout)
-        if not self._timeout_expired:
-            self.event_caught = True
-        return msg
-
+        return await event_wait(self, timeout)
 
 class TimeQueue:
     """An abstraction layer over a heap queue based on time. This is where
