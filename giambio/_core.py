@@ -65,13 +65,13 @@ class AsyncScheduler:
                 if self.paused:  # If there are no actively running tasks, we try to schedule the asleep ones
                     try:
                         self.check_sleeping()
-                    except BaseException as error:
+                    except Exception as error:
                         self.current_task.exc = error
                         self.reschedule_parent(self.current_task)
             if self.selector.get_map():
                 try:
                     self.check_io()
-                except BaseException as error:
+                except Exception as error:
                     self.current_task.exc = error
                     self.reschedule_parent(self.current_task)
             while self.tasks:    # While there are tasks to run
@@ -92,7 +92,7 @@ class AsyncScheduler:
                     self.current_task.result = e.args[0] if e.args else None
                     self.current_task.finished = True
                     self.reschedule_parent(self.current_task)
-                except BaseException as error:    # Coroutine raised
+                except Exception as error:    # Coroutine raised
                     self.current_task.exc = error
                     self.reschedule_parent(self.current_task)
 
@@ -146,7 +146,8 @@ class AsyncScheduler:
         crashed = False
         try:
             self.run()
-        except BaseException as exc:
+            self.join(entry)
+        except Exception as exc:
             entry.exc = exc
             crashed = True
         if crashed:
@@ -250,7 +251,7 @@ class AsyncScheduler:
         in order to stop it from executing. The loop continues to execute as tasks
         are independent"""
 
-        if task.status in ("sleep", "I/O") and not task.cancelled:  # It is safe to cancel a task while blocking
+        if task.status in ("sleep", "I/O") and not task.cancelled and not task.finished:  # It is safe to cancel a task while blocking
             task.cancelled = True
             task.throw(CancelledError(task))
         elif task.status == "run":
