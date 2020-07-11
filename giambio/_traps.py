@@ -48,7 +48,6 @@ def join(task):
     """
 
     yield "join", task
-    return task.result
 
 
 @types.coroutine
@@ -95,7 +94,7 @@ def event_set(event, value):
 
 
 @types.coroutine
-def event_wait(event, timeout: int):
+def event_wait(event):
 
-    msg = yield "event_wait", event, timeout
+    msg = yield "event_wait", event
     return msg

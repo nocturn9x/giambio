@@ -17,6 +17,8 @@ limitations under the License.
 import types
 from ._traps import join, cancel, event_set, event_wait
 from heapq import heappop, heappush
+from .exceptions import GiambioError
+
 
 class Task:
 
@@ -61,26 +63,29 @@ class Task:
 class Event:
     """A class designed similarly to threading.Event, but with more features"""
 
-    def __init__(self, loop):
+    def __init__(self):
         """Object constructor"""
 
         self._set = False
         self._notify = None
-        self.notifier = loop.current_task
-        self._timeout_expired = False
         self.event_caught = False
         self.timeout = None
+        self.waiting = 0
 
-    async def set(self, value=None):
+    async def set(self, value=True):
         """Sets the event, optionally taking a value. This can be used
            to control tasks' flow by 'sending' commands back and fort"""
 
+        if self._set:
+            raise GiambioError("The event has already been set")
         await event_set(self, value)
 
-    async def pause(self, timeout=0):
+    async def pause(self):
         """Waits until the event is set and returns a value"""
 
-        return await event_wait(self, timeout)
+        self.waiting += 1
+        return await event_wait(self)
+
 
 class TimeQueue:
     """An abstraction layer over a heap queue based on time. This is where

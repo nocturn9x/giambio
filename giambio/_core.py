@@ -16,13 +16,13 @@ limitations under the License.
 
 # Import libraries and internal resources
 import types
-from collections import deque
+from collections import deque, defaultdict
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
-from .exceptions import AlreadyJoinedError, CancelledError, ResourceBusy
+from .exceptions import AlreadyJoinedError, CancelledError, ResourceBusy, GiambioError
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket, WantWrite, WantRead
+from .socket import AsyncSocket, WantWrite
 from ._layers import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from ._traps import want_read, want_write
@@ -49,7 +49,7 @@ class AsyncScheduler:
         self.clock = default_timer  # Monotonic clock to keep track of elapsed time reliably
         self.paused = TimeQueue(self.clock)  # Tasks that are asleep
         self.events = {}   # All Event objects
-        self.event_waiting = {}  # Coroutines waiting on event objects
+        self.event_waiting = defaultdict(list)  # Coroutines waiting on event objects
         self.sequence = 0
 
     def run(self):
@@ -81,7 +81,7 @@ class AsyncScheduler:
                 try:
                     if self.current_task.status == "cancel":  # Deferred cancellation
                         self.current_task.cancelled = True
-                        self.current_task.throw(CancelledError)
+                        self.current_task.throw(CancelledError(self.current_task))
                     method, *args = self.current_task.run(self.current_task._notify)   # Run a single step with the calculation (and awake event-waiting tasks if any)
                     self.current_task.status = "run"
                     getattr(self, method)(*args)  # Sneaky method call, thanks to David Beazley for this ;)
@@ -89,6 +89,7 @@ class AsyncScheduler:
                         self.check_events()
                 except CancelledError as cancelled:
                     self.tasks.remove(cancelled.args[0])   # Remove the dead task
+                    self.tasks.append(self.current_task)
                 except StopIteration as e:   # Coroutine ends
                     self.current_task.result = e.args[0] if e.args else None
                     self.current_task.finished = True
@@ -101,18 +102,12 @@ class AsyncScheduler:
     def check_events(self):
         """Checks for ready or expired events and triggers them"""
 
-        for event, (timeout, _, task) in self.event_waiting.copy().items():
-            if timeout and self.clock() > timeout:
-                event._timeout_expired = True
-                event._notify = task._notify = None
-                self.tasks.append(task)
-                self.tasks.append(event.notifier)
-                self.event_waiting.pop(event)
-            elif event._set:
+        for event, tasks in self.event_waiting.copy().items():
+            if event._set:
                 event.event_caught = True
-                task._notify = event._notify
-                self.tasks.append(task)
-                self.tasks.append(event.notifier)
+                for task in tasks:
+                    task._notify = event._notify
+                self.tasks.extend(tasks + [event.notifier])
                 self.event_waiting.pop(event)
 
     def check_sleeping(self):
@@ -139,19 +134,33 @@ class AsyncScheduler:
         self.tasks.append(task)
         return task
 
+    def schedule_task(self, coro: types.coroutine, n: int):
+        """Schedules a task for execution after n seconds"""
+
+        task = Task(coro)
+        self.paused.put(task, n)
+        return task
+
     def start(self, coro: types.coroutine):
         """Starts the event loop using a coroutine as an entry point.
         """
 
-        self.create_task(coro)
-        self.run()
+        entry = self.create_task(coro)
+        crashed = False
+        try:
+            self.run()
+        except BaseException as exc:
+            entry.exc = exc
+            crashed = True
+        if crashed:
+            raise GiambioError("Event loop crashed!") from entry.exc
+        return entry
 
     def reschedule_parent(self, coro):
         """Reschedules the parent task"""
 
         parent = self.joined.pop(coro, None)
         if parent:
-            assert parent not in self.tasks
             self.tasks.append(parent)
         return parent
 
@@ -197,13 +206,10 @@ class AsyncScheduler:
         coroutine returns or, if an exception gets raised, the exception will get propagated inside the
         parent task"""
 
-        if child.finished:
-            self.tasks.append(self.current_task)
+        if child not in self.joined:
+            self.joined[child] = self.current_task
         else:
-           if child not in self.joined:
-                self.joined[child] = self.current_task
-           else:
-                raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
     def sleep(self, seconds: int or float):
         """Puts the caller to sleep for a given amount of seconds"""
@@ -222,19 +228,17 @@ class AsyncScheduler:
         event._notify = value
         self.events[event] = value
 
-    def event_wait(self, event, timeout):
+    def event_wait(self, event):
         """Waits for an event"""
 
-        self.sequence += 1
-        if timeout:
-            timeout = self.clock() + timeout
-        else:
-            timeout = 0
         if self.events.get(event, None):
-            return self.events.pop(event)
+            event.waiting -= 1
+            if event.waiting <= 0:
+                return self.events.pop(event)
+            else:
+                return self.events[event]
         else:
-            self.event_waiting[event] = timeout, self.sequence, self.current_task
-            self.event_waiting = dict(sorted(self.event_waiting.items()))
+            self.event_waiting[event].append(self.current_task)
 
     def cancel(self, task):
         """Handler for the 'cancel' event, throws CancelledError inside a coroutine
@@ -245,8 +249,7 @@ class AsyncScheduler:
             task.cancelled = True
             task.throw(CancelledError(task))
         elif task.status == "run":
-            task.status = "cancel"
-        self.reschedule_parent()
+            task.status = "cancel"   # Cancellation is deferred
 
     def wrap_socket(self, sock):
         """Wraps a standard socket into an AsyncSocket object"""

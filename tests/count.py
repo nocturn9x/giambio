@@ -25,6 +25,7 @@ async def main():
     await giambio.sleep(2)
     print("Slept 2 seconds, killing countup")
     await cup.cancel()    ## DOES NOT WORK!!!
+    print("Countup cancelled")
     await cup.join()
     await cdown.join()
     print("Task execution complete")
