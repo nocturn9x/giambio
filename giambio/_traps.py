@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-"""Helper methods to interact with the event loop"""
+# Helper methods to interact with the event loop
+# These coroutines are the one and only way to interact
+# with the event loop from the user's perspective, and
+# the entire library is based on these traps
 
 import types
 import socket
@@ -47,7 +50,8 @@ def join(task):
         :type task: class: Task
     """
 
-    yield "join", task
+    res = yield "join", task
+    return task.result
 
 
 @types.coroutine
@@ -89,12 +93,19 @@ def want_write(sock: socket.socket):
 
 @types.coroutine
 def event_set(event, value):
+    """Communicates to the loop that the given event object
+       must be set. This is important as the loop constantly
+       checks for active events to deliver them
+    """
 
     yield "event_set", event, value
 
 
 @types.coroutine
 def event_wait(event):
+    """Notifies the event loop that the current task has to wait
+       for the event to trigger
+    """
 
     msg = yield "event_wait", event
     return msg

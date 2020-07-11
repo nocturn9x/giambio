@@ -68,14 +68,12 @@ class AsyncScheduler:
                     except BaseException as error:
                         self.current_task.exc = error
                         self.reschedule_parent(self.current_task)
-                        raise  # Maybe find a better way to propagate errors?
             if self.selector.get_map():
                 try:
                     self.check_io()
                 except BaseException as error:
                     self.current_task.exc = error
                     self.reschedule_parent(self.current_task)
-                    raise  # Maybe find a better way to propagate errors?
             while self.tasks:    # While there are tasks to run
                 self.current_task = self.tasks.popleft()  # Sets the currently running task
                 try:
@@ -97,7 +95,6 @@ class AsyncScheduler:
                 except BaseException as error:    # Coroutine raised
                     self.current_task.exc = error
                     self.reschedule_parent(self.current_task)
-                    raise  # Maybe find a better way to propagate errors?
 
     def check_events(self):
         """Checks for ready or expired events and triggers them"""
@@ -206,10 +203,18 @@ class AsyncScheduler:
         coroutine returns or, if an exception gets raised, the exception will get propagated inside the
         parent task"""
 
-        if child not in self.joined:
-            self.joined[child] = self.current_task
+        if child.cancelled:  # Task was cancelled and is therefore dead
+            self.tasks.append(self.current_task)
+        elif child.exc:     # Task raised an error, propagate it!
+            self.reschedule_parent(child)
+            raise child.exc
+        elif child.finished:
+            self.tasks.append(self.current_task)  # Task has already finished
         else:
-            raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
+            if child not in self.joined:
+                self.joined[child] = self.current_task
+            else:
+                raise AlreadyJoinedError("Joining the same task multiple times is not allowed!")
 
     def sleep(self, seconds: int or float):
         """Puts the caller to sleep for a given amount of seconds"""
