@@ -16,9 +16,17 @@ limitations under the License.
 
 from ._core import AsyncScheduler
 from types import coroutine
+from threading import current_thread
+from time import monotonic
+from hashlib import sha256
 
 
 def run(coro: coroutine):
     """Shorthand for giambio.AsyncScheduler().start(coro)"""
 
-    ...  # How to do it? (Share objects between coroutines etc)
+    thread = current_thread()
+    token = str(time.monotonic())
+    token += thread.name
+    token += str(thread.native_id)
+    token += str(thread.ident)
+    token = sha256(token.encode()).hexdigest()   # Unique token specific to a given thread at a given time

@@ -21,6 +21,7 @@ limitations under the License.
 
 import types
 import socket
+from .exceptions import GiambioCriticalError
 
 
 @types.coroutine
@@ -50,7 +51,11 @@ def join(task):
         :type task: class: Task
     """
 
-    res = yield "join", task
+    yield "join", task
+    if task.exc:
+        raise task.exc
+    elif not task.finished and not task.cancelled:
+        raise GiambioCriticalError(f"Task {task} did not terminate properly, the event loop might be in an inconsistent state!")
     return task.result
 
 
@@ -66,7 +71,8 @@ def cancel(task):
     """
 
     yield "cancel", task
-    assert task.cancelled, f"Coroutine ignored CancelledError"
+    if not task.cancelled:
+        raise GiambioCriticalError(f"Task {task} ignored CancelledError")
 
 
 @types.coroutine

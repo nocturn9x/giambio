@@ -102,6 +102,10 @@ class TimeQueue:
     def __iter__(self):
         return iter(self.container)
 
+    def items(self):
+        for _, __, item in self.container:
+            yield item
+
     def __getitem__(self, item):
         return self.container.__getitem__(item)
 

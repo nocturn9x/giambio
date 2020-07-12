@@ -14,20 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from traceback import format_exception
+
+
 class GiambioError(Exception):
-    """Base class for gaimbio exceptions"""
+    """Base class for giambio exceptions"""
     pass
 
 
-class AlreadyJoinedError(GiambioError):
-    pass
+class GiambioCriticalError(BaseException):
+    """A critical error"""
 
 
-class CancelledError(BaseException):
-    """Exception raised as a result of the giambio.core.cancel() method"""
-
-    def __repr__(self):
-        return "giambio.exceptions.CancelledError"
+class CancelledError(GiambioCriticalError):
+    """Exception raised as a result of the giambio._layers.Task.cancel()  method"""
 
 
 class ResourceBusy(GiambioError):
@@ -43,4 +43,22 @@ class BrokenPipeError(GiambioError):
 
 class ResourceClosed(GiambioError):
     """Raised when I/O is attempted on a closed fd"""
+
     pass
+
+
+class ErrorStack(GiambioError):
+    """Raised when multiple exceptions occur upon cancellation"""
+
+    SEP = "----------------------------------\n"
+    errors = []
+
+    def __str__(self):
+        """Taken from anyio"""
+
+        tb_list = ['\n'.join(format_exception(type(err), err, err.__traceback__))
+                   for err in self.errors]
+        return f"{len(self.errors)} errors occurred, details below\n{self.SEP}{self.SEP.join(tb_list)}"
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} (contains {len(self.errors)} exceptions)>"
