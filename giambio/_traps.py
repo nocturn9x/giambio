@@ -55,7 +55,9 @@ def join(task):
     if task.exc:
         raise task.exc
     elif not task.finished and not task.cancelled:
-        raise GiambioCriticalError(f"Task {task} did not terminate properly, the event loop might be in an inconsistent state!")
+        raise GiambioCriticalError(
+            f"Task {task} did not terminate properly, the event loop might be in an inconsistent state!"
+        )
     return task.result
 
 

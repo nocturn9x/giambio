@@ -26,7 +26,7 @@ class Task:
 
     def __init__(self, coroutine: types.coroutine):
         self.coroutine = coroutine
-        self.cancelled = False   # True if the task gets cancelled
+        self.cancelled = False  # True if the task gets cancelled
         self.exc = None
         self.result = None
         self.finished = False
@@ -121,5 +121,3 @@ class TimeQueue:
 
     def get(self):
         return heappop(self.container)[2]
-
-

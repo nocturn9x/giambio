@@ -29,4 +29,6 @@ def run(coro: coroutine):
     token += thread.name
     token += str(thread.native_id)
     token += str(thread.ident)
-    token = sha256(token.encode()).hexdigest()   # Unique token specific to a given thread at a given time
+    token = sha256(
+        token.encode()
+    ).hexdigest()  # Unique token specific to a given thread at a given time

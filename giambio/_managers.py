@@ -21,11 +21,15 @@ class TaskManager(object):
         """Cancels all tasks and raises an exception"""
 
         exc = ErrorStack()
-        for task in itertools.chain(self.scheduler.tasks.copy(), self.scheduler.paused.items(), *self.scheduler.event_waiting.values()):
-                try:
-                    await task.cancel()
-                except Exception as err:
-                    exc.errors.append(err)
+        for task in itertools.chain(
+            self.scheduler.tasks.copy(),
+            self.scheduler.paused.items(),
+            *self.scheduler.event_waiting.values()
+        ):
+            try:
+                await task.cancel()
+            except Exception as err:
+                exc.errors.append(err)
         if exc.errors:
             exc.errors.insert(err, 0)
             raise exc
@@ -35,7 +39,9 @@ class TaskManager(object):
         """Implements async with self"""
 
         while True:
-            tasks = itertools.chain(self.scheduler.tasks.copy(), self.scheduler.paused.items())
+            tasks = itertools.chain(
+                self.scheduler.tasks.copy(), self.scheduler.paused.items()
+            )
             for task in tasks:
                 try:
                     self.values[task] = await task.join()

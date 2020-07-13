@@ -19,6 +19,7 @@ from traceback import format_exception
 
 class GiambioError(Exception):
     """Base class for giambio exceptions"""
+
     pass
 
 
@@ -33,11 +34,13 @@ class CancelledError(GiambioCriticalError):
 class ResourceBusy(GiambioError):
     """Exception that is raised when a resource is accessed by more than
        one task at a time"""
+
     pass
 
 
 class BrokenPipeError(GiambioError):
     """Wrapper around the broken pipe socket.error"""
+
     pass
 
 
@@ -56,8 +59,10 @@ class ErrorStack(GiambioError):
     def __str__(self):
         """Taken from anyio"""
 
-        tb_list = ['\n'.join(format_exception(type(err), err, err.__traceback__))
-                   for err in self.errors]
+        tb_list = [
+            "\n".join(format_exception(type(err), err, err.__traceback__))
+            for err in self.errors
+        ]
         return f"{len(self.errors)} errors occurred, details below\n{self.SEP}{self.SEP.join(tb_list)}"
 
     def __repr__(self):

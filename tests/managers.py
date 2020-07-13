@@ -9,6 +9,7 @@ async def countdown(n: int):
     print("Countdown over")
     return 0
 
+
 async def countup(stop: int, step: int = 1):
     x = 0
     while x < stop:
@@ -30,7 +31,7 @@ async def main():
         print("Countup cancelled")
     print("Task execution complete")
 
+
 if __name__ == "__main__":
     scheduler = giambio.AsyncScheduler()
     scheduler.start(main())
-

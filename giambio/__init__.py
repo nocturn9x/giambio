@@ -23,5 +23,11 @@ from ._layers import Event
 from ._managers import TaskManager
 
 
-__all__ = ["AsyncScheduler",  "GiambioError", "CancelledError", "sleep", "Event", "TaskManager"]
-
+__all__ = [
+    "AsyncScheduler",
+    "GiambioError",
+    "CancelledError",
+    "sleep",
+    "Event",
+    "TaskManager",
+]
