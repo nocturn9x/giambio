@@ -21,8 +21,10 @@ limitations under the License.
 import socket
 from .exceptions import ResourceClosed
 from ._traps import sleep
+
 try:
     from ssl import SSLWantReadError, SSLWantWriteError
+
     WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
     WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
 except ImportError:
@@ -67,7 +69,7 @@ class AsyncSocket(object):
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await sleep(0)   # Give the scheduler the time to unregister the socket first
+        await sleep(0)  # Give the scheduler the time to unregister the socket first
         await self.loop.close_sock(self.sock)
         self._closed = True
 
@@ -86,4 +88,3 @@ class AsyncSocket(object):
 
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
-

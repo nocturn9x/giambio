@@ -5,9 +5,9 @@ import logging
 
 sched = giambio.AsyncScheduler()
 
-logging.basicConfig(level=20,
-                    format="[%(levelname)s] %(asctime)s %(message)s",
-                    datefmt='%d/%m/%Y %p')
+logging.basicConfig(
+    level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p"
+)
 
 
 async def server(address: tuple):
@@ -31,7 +31,7 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
             if not data:
                 break
             to_send_back = data
-            data = data.decode("utf-8").encode('unicode_escape')
+            data = data.decode("utf-8").encode("unicode_escape")
             logging.info(f"Got: '{data.decode('utf-8')}' from {addr}")
             await sock.send_all(b"Got: " + to_send_back)
             logging.info(f"Echoed back '{data.decode('utf-8')}' to {addr}")
@@ -40,7 +40,6 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
 
 if __name__ == "__main__":
     try:
-        sched.start(server(('', 25001)))
-    except KeyboardInterrupt:      # Exceptions propagate!
+        sched.start(server(("", 25001)))
+    except KeyboardInterrupt:  # Exceptions propagate!
         print("Exiting...")
-

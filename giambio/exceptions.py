@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+
 class GiambioError(Exception):
     """Base class for gaimbio exceptions"""
+
     pass
 
 
@@ -33,14 +35,17 @@ class CancelledError(BaseException):
 class ResourceBusy(GiambioError):
     """Exception that is raised when a resource is accessed by more than
        one task at a time"""
+
     pass
 
 
 class BrokenPipeError(GiambioError):
     """Wrapper around the broken pipe socket.error"""
+
     pass
 
 
 class ResourceClosed(GiambioError):
     """Raised when I/O is attempted on a closed fd"""
+
     pass

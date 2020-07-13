@@ -21,5 +21,11 @@ from .exceptions import GiambioError, AlreadyJoinedError, CancelledError
 from ._traps import sleep
 from ._layers import Event
 
-__all__ = ["AsyncScheduler",  "GiambioError", "AlreadyJoinedError", "CancelledError", "sleep", "Event"]
-
+__all__ = [
+    "AsyncScheduler",
+    "GiambioError",
+    "AlreadyJoinedError",
+    "CancelledError",
+    "sleep",
+    "Event",
+]
