@@ -107,8 +107,10 @@ class AsyncScheduler:
                         ):  # Schedules tasks that are waiting on events
                             self.check_events()
                 except CancelledError as cancelled:
-                    if cancelled.args[0] in self.tasks:
-                        self.tasks.remove(cancelled.args[0])  # Remove the dead task
+                    task = cancelled.args[0]
+                    task.cancelled = True
+                    if task in self.tasks:
+                        self.tasks.remove(task)  # Remove the dead task
                     self.tasks.append(self.current_task)
                 except StopIteration as e:  # Coroutine ends
                     self.current_task.result = e.args[0] if e.args else None
@@ -238,7 +240,9 @@ class AsyncScheduler:
     def sleep(self, seconds: int or float):
         """Puts the caller to sleep for a given amount of seconds"""
 
-        if seconds:
+        if seconds < 0:
+            raise ValueError("the delay can't be negative")
+        elif seconds:
             self.current_task.status = "sleep"
             self.paused.put(self.current_task, seconds)
         else:
@@ -276,8 +280,12 @@ class AsyncScheduler:
             "sleep",
             "I/O",
         ):  # It is safe to cancel a task while blocking
-            task.cancelled = True
-            task.throw(CancelledError(task))
+            try:
+                task.throw(CancelledError(task))
+            except Exception as error:
+                task.cancelled = True  # The task died
+                self.tasks.append(self.current_task)
+                task.exc = error
         else:
             task.status = "cancel"  # Cancellation is deferred
 

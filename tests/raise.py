@@ -24,14 +24,25 @@ async def countup(stop: int, step: int = 1):
         raise ValueError("Ciao")
 
 
+async def countdown2(n: int):
+    while n > 0:
+        print(f"Down {n}")
+        n -= 1
+        await giambio.sleep(1)
+        raise Exception("bruh")
+    print("Countdown over")
+    return 0
+
+
 async def main():
     try:
         async with giambio.TaskManager(scheduler) as manager:
-            cdown = manager.create_task(countdown(10))
             cup = manager.create_task(countup(5, 2))
+            cdown = manager.create_task(countdown(10))
+#            cdown2 = manager.create_task(countdown2(5))
             print("Counters started, awaiting completion")
-    except Exception:
-        print("Exceptions propagate!")
+    except Exception as err:
+        print(f"An error occurred!\n{type(err).__name__}: {err}")
     print("Task execution complete")
 
 

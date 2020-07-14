@@ -1,5 +1,5 @@
 from ._core import AsyncScheduler
-from .exceptions import ErrorStack
+from .exceptions import ErrorStack, CancelledError
 import itertools
 
 
@@ -20,18 +20,22 @@ class TaskManager(object):
     async def _cancel_and_raise(self, err):
         """Cancels all tasks and raises an exception"""
 
-        exc = ErrorStack()
+        errors = []
         for task in itertools.chain(
             self.scheduler.tasks.copy(),
             self.scheduler.paused.items(),
-            *self.scheduler.event_waiting.values()
+            self.scheduler.event_waiting.values(),
         ):
+            await task.cancel()
             try:
-                await task.cancel()
-            except Exception as err:
-                exc.errors.append(err)
-        if exc.errors:
-            exc.errors.insert(err, 0)
+                await task.join()
+            except Exception as fault:
+                fault.__cause__ = None  # We clear this to avoid unrelated tracebacks
+                errors.append(fault)
+        if errors:
+            exc = ErrorStack()
+            errors.insert(0, err)
+            exc.errors = errors
             raise exc
         raise err
 
