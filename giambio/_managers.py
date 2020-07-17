@@ -10,6 +10,9 @@ class TaskManager(object):
         """Object constructor"""
 
         self.scheduler = scheduler
+        self.tasks = self.scheduler.tasks
+        self.asleep = self.scheduler.paused
+        self.event_waiting = self.scheduler.event_waiting
         self.values = {}
 
     async def __aenter__(self):
@@ -22,9 +25,9 @@ class TaskManager(object):
 
         errors = []
         for task in itertools.chain(
-            self.scheduler.tasks.copy(),
-            self.scheduler.paused.items(),
-            self.scheduler.event_waiting.values(),
+            self.tasks.copy(),
+            self.asleep.items(),
+            self.event_waiting.values(),
         ):
             await task.cancel()
             try:
@@ -44,7 +47,7 @@ class TaskManager(object):
 
         while True:
             tasks = itertools.chain(
-                self.scheduler.tasks.copy(), self.scheduler.paused.items()
+                self.tasks.copy(), self.asleep.items()
             )
             for task in tasks:
                 try:
