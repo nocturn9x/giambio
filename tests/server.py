@@ -41,5 +41,5 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
 if __name__ == "__main__":
     try:
         sched.start(server(("", 25001)))
-    except KeyboardInterrupt:  # Exceptions propagate!
-        print("Exiting...")
+    except giambio.exceptions.GiambioError as wrapper:  # Exceptions propagate!
+        print(f"Exiting due to a {type(wrapper.__cause__).__name__}")

@@ -62,31 +62,23 @@ class AsyncScheduler:
         the loop's functionality only trough some fixed entry points, which in turn yield and
         give execution control to the loop itself."""
 
-        while True:
-            if not self.selector.get_map() and not any(
-                [self.paused, self.tasks, self.event_waiting]
-            ):  # If there is nothing to do, just exit
-                break
-            if not self.tasks:
-                if (
-                    self.paused
-                ):  # If there are no actively running tasks, we try to schedule the asleep ones
-                    try:
+        try:
+            while True:
+                if not self.selector.get_map() and not any(
+                    [self.paused, self.tasks, self.event_waiting]
+                ):  # If there is nothing to do, just exit
+                    break
+                if not self.tasks:
+                    if (
+                        self.paused
+                    ):  # If there are no actively running tasks, we try to schedule the asleep ones
                         self.check_sleeping()
-                    except BaseException as error:
-                        self.current_task.exc = error
-                        self.reschedule_parent(self.current_task)
-            if self.selector.get_map():
-                try:
+                if self.selector.get_map():
                     self.check_io()
-                except BaseException as error:
-                    self.current_task.exc = error
-                    self.reschedule_parent(self.current_task)
-            while self.tasks:  # While there are tasks to run
-                self.current_task = (
-                    self.tasks.popleft()
-                )  # Sets the currently running task
-                try:
+                while self.tasks:  # While there are tasks to run
+                    self.current_task = (
+                        self.tasks.popleft()
+                    )  # Sets the currently running task
                     if self.current_task.status == "cancel":  # Deferred cancellation
                         self.current_task.cancelled = True
                         self.current_task.throw(CancelledError(self.current_task))
@@ -99,16 +91,17 @@ class AsyncScheduler:
                     )  # Sneaky method call, thanks to David Beazley for this ;)
                     if self.event_waiting:
                         self.check_events()
-                except CancelledError as cancelled:
-                    self.tasks.remove(cancelled.args[0])  # Remove the dead task
-                    self.tasks.append(self.current_task)
-                except StopIteration as e:  # Coroutine ends
-                    self.current_task.result = e.args[0] if e.args else None
-                    self.current_task.finished = True
-                    self.reschedule_parent(self.current_task)
-                except BaseException as error:  # Coroutine raised
-                    self.current_task.exc = error
-                    self.reschedule_parent(self.current_task)
+        except CancelledError as cancelled:
+            self.tasks.remove(cancelled.args[0])  # Remove the dead task
+            self.tasks.append(self.current_task)
+        except StopIteration as e:  # Coroutine ends
+            self.current_task.result = e.args[0] if e.args else None
+            self.current_task.finished = True
+            self.reschedule_parent(self.current_task)
+        except BaseException as error:  # Coroutine raised
+            self.current_task.exc = error
+            self.reschedule_parent(self.current_task)
+            self.join(self.current_task)
 
     def check_events(self):
         """Checks for ready or expired events and triggers them"""
