@@ -24,7 +24,7 @@ async def server(address: tuple):
 
 
 async def echo_handler(sock: AsyncSocket, addr: tuple):
-    with sock:
+    async with sock:
         await sock.send_all(b"Welcome to the server pal!\n")
         while True:
             data = await sock.receive(1000)

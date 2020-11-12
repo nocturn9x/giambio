@@ -47,14 +47,14 @@ class AsyncSocket(object):
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
         self.loop.current_task.status = "I/O"
-        return await self.loop.read_sock(self.sock, max_size)
+        return await self.loop._read_sock(self.sock, max_size)
 
     async def accept(self):
         """Accepts the socket, completing the 3-step TCP handshake asynchronously"""
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        to_wrap = await self.loop.accept_sock(self.sock)
+        to_wrap = await self.loop._accept_sock(self.sock)
         return self.loop.wrap_socket(to_wrap[0]), to_wrap[1]
 
     async def send_all(self, data: bytes):
@@ -62,7 +62,7 @@ class AsyncSocket(object):
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        return await self.loop.sock_sendall(self.sock, data)
+        return await self.loop._sock_sendall(self.sock, data)
 
     async def close(self):
         """Closes the socket asynchronously"""
@@ -70,7 +70,7 @@ class AsyncSocket(object):
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
         await sleep(0)  # Give the scheduler the time to unregister the socket first
-        await self.loop.close_sock(self.sock)
+        await self.loop._close_sock(self.sock)
         self._closed = True
 
     async def connect(self, addr: tuple):
@@ -78,12 +78,14 @@ class AsyncSocket(object):
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await self.loop.connect_sock(self.sock, addr)
+        await self.loop._connect_sock(self.sock, addr)
 
-    def __enter__(self):
+    async def __aenter__(self):
+        await sleep(0)
         return self.sock.__enter__()
 
-    def __exit__(self, *args):
+    async def __aexit__(self, *args):
+        await sleep(0)
         return self.sock.__exit__(*args)
 
     def __repr__(self):
