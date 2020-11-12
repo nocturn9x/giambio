@@ -27,6 +27,7 @@ async def main():
     await giambio.sleep(2)
     print("Slept 2 seconds, killing countup")
     await cup.cancel()
+#    raise TypeError("bruh")
     print("Countup cancelled")
     up = await cup.join()
     down = await cdown.join()
@@ -36,4 +37,7 @@ async def main():
 
 if __name__ == "__main__":
     scheduler = giambio.AsyncScheduler()
-    scheduler.start(main())
+    try:
+        scheduler.start(main())
+    except Exception:
+        print("bruh")

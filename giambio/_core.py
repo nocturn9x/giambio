@@ -171,14 +171,8 @@ class AsyncScheduler:
         """
 
         entry = self.create_task(coro)
-        crashed = False
-        try:
-            self.run()
-        except BaseException as exc:
-            entry.exc = exc
-            crashed = True
-        if crashed:
-            raise entry.exc
+        self.run()
+        self._join(entry)
         return entry
 
     def reschedule_parent(self, coro):
