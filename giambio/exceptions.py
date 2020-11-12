@@ -34,7 +34,7 @@ class CancelledError(BaseException):
 
 class ResourceBusy(GiambioError):
     """Exception that is raised when a resource is accessed by more than
-       one task at a time"""
+    one task at a time"""
 
     pass
 

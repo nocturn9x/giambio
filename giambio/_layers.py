@@ -74,7 +74,7 @@ class Event:
 
     async def set(self, value=True):
         """Sets the event, optionally taking a value. This can be used
-           to control tasks' flow by 'sending' commands back and fort"""
+        to control tasks' flow by 'sending' commands back and fort"""
 
         if self._set:
             raise GiambioError("The event has already been set")
@@ -89,7 +89,7 @@ class Event:
 
 class TimeQueue:
     """An abstraction layer over a heap queue based on time. This is where
-       sleeping tasks will be put when they are asleep"""
+    sleeping tasks will be put when they are asleep"""
 
     def __init__(self, clock):
         self.clock = clock

@@ -46,8 +46,8 @@ def sleep(seconds: int):
 def join(task):
     """'Tells' the scheduler that the desired task MUST be awaited for completion
 
-        :param task: The task to join
-        :type task: class: Task
+    :param task: The task to join
+    :type task: class: Task
     """
 
     res = yield "join", task
@@ -58,11 +58,11 @@ def join(task):
 def cancel(task):
     """'Tells' the scheduler that the passed task must be cancelled
 
-       The concept of cancellation here is tricky, because there is no real way to 'stop' a
-       running task if not by raising an exception inside it and just ignore whatever the task
-       returns (and also hoping that the task won't cause damage when exiting abruptly).
-       It is highly recommended that when you write a coroutine you take into account that it might
-       be cancelled at any time
+    The concept of cancellation here is tricky, because there is no real way to 'stop' a
+    running task if not by raising an exception inside it and just ignore whatever the task
+    returns (and also hoping that the task won't cause damage when exiting abruptly).
+    It is highly recommended that when you write a coroutine you take into account that it might
+    be cancelled at any time
     """
 
     yield "cancel", task
@@ -73,8 +73,8 @@ def cancel(task):
 def want_read(sock: socket.socket):
     """'Tells' the event loop that there is some coroutine that wants to read from the given socket
 
-       :param sock: The socket to perform the operation on
-       :type sock: class: socket.socket
+    :param sock: The socket to perform the operation on
+    :type sock: class: socket.socket
     """
 
     yield "want_read", sock
@@ -84,8 +84,8 @@ def want_read(sock: socket.socket):
 def want_write(sock: socket.socket):
     """'Tells' the event loop that there is some coroutine that wants to write on the given socket
 
-       :param sock: The socket to perform the operation on
-       :type sock: class: socket.socket
+    :param sock: The socket to perform the operation on
+    :type sock: class: socket.socket
     """
 
     yield "want_write", sock
@@ -94,8 +94,8 @@ def want_write(sock: socket.socket):
 @types.coroutine
 def event_set(event, value):
     """Communicates to the loop that the given event object
-       must be set. This is important as the loop constantly
-       checks for active events to deliver them
+    must be set. This is important as the loop constantly
+    checks for active events to deliver them
     """
 
     yield "event_set", event, value
@@ -104,7 +104,7 @@ def event_set(event, value):
 @types.coroutine
 def event_wait(event):
     """Notifies the event loop that the current task has to wait
-       for the event to trigger
+    for the event to trigger
     """
 
     msg = yield "event_wait", event
