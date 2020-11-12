@@ -6,7 +6,7 @@ This library implements what is known as a stackless mode of execution, or "gree
 
 ## Disclaimer
 
-Right now this is no more than a toy implementation to help me understand how Python and async work, but it will (hopefully) become a production ready library soon
+Right now this is no more than a toy implementation to help me understand how Python and async work, and it is pretty much guaranteed to explode spectacularly badly
 
 Also, this project was hugely inspired by the [curio project](https://github.com/dabeaz/curio) and the [trio project](https://github.com/python-trio/trio)
 
