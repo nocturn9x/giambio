@@ -10,7 +10,7 @@ async def child(notifier: giambio.Event, pause: int):
     await notifier.pause()
     end_pause = giambio.clock() - start_total
     print(f"[child] Parent set the event, exiting in {pause} seconds")
-    start_sleep = giambio.clock() - start_total
+    start_sleep = giambio.clock()
     await giambio.sleep(pause)
     end_sleep = giambio.clock() - start_sleep
     end_total = giambio.clock() - start_total
