@@ -26,7 +26,7 @@ One possible approach to achieve concurrency is to use threads, and despite thei
 actually might be a good choice when it comes to I/O for reasons that span far beyond the scope of this tutorial.
 If you choose to use threads, there are a couple things you can do, involving what is known as _thread synchronization 
 primitives_ and _thread pools_, but once again that is beyond the purposes of this quickstart guide.
-A library like giambio comes into play when you need to perform lots of [blocking operations](https://en.wikipedia.org/wiki/Blocking_(computing)
+A library like giambio comes into play when you need to perform lots of [blocking operations](https://en.wikipedia.org/wiki/Blocking_(computing))
 and network servers, among other things, happens to rely heavily on I/O which is a blocking operation. 
 Starting to see where we're heading?
 
