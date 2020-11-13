@@ -56,13 +56,16 @@ def join(task):
 
 @types.coroutine
 def cancel(task):
-    """'Tells' the scheduler that the passed task must be cancelled
+    """
+    'Tells' the scheduler that the passed task must be cancelled
 
     The concept of cancellation here is tricky, because there is no real way to 'stop' a
     running task if not by raising an exception inside it and just ignore whatever the task
-    returns (and also hoping that the task won't cause damage when exiting abruptly).
+    returns (and also hoping that the task won't cause collateral damage when exiting abruptly).
     It is highly recommended that when you write a coroutine you take into account that it might
-    be cancelled at any time
+    be cancelled at any time. Please note, though, that ignoring a giambio.exceptions.CancelledError
+    exception *will* break your code, so if you really wanna do that be sure to re-raise
+    it when done!
     """
 
     yield "cancel", task
@@ -71,7 +74,8 @@ def cancel(task):
 
 @types.coroutine
 def want_read(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to read from the given socket
+    """
+    'Tells' the event loop that there is some coroutine that wants to read from the given socket
 
     :param sock: The socket to perform the operation on
     :type sock: class: socket.socket
@@ -82,7 +86,8 @@ def want_read(sock: socket.socket):
 
 @types.coroutine
 def want_write(sock: socket.socket):
-    """'Tells' the event loop that there is some coroutine that wants to write on the given socket
+    """
+    'Tells' the event loop that there is some coroutine that wants to write on the given socket
 
     :param sock: The socket to perform the operation on
     :type sock: class: socket.socket
@@ -92,18 +97,19 @@ def want_write(sock: socket.socket):
 
 
 @types.coroutine
-def event_set(event, value):
+def event_set(event):
     """Communicates to the loop that the given event object
     must be set. This is important as the loop constantly
     checks for active events to deliver them
     """
 
-    yield "event_set", event, value
+    yield "event_set", event
 
 
 @types.coroutine
 def event_wait(event):
-    """Notifies the event loop that the current task has to wait
+    """
+    Notifies the event loop that the current task has to wait
     for the event to trigger
     """
 

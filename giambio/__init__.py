@@ -16,16 +16,19 @@ limitations under the License.
 
 __author__ = "Nocturn9x aka Isgiambyy"
 __version__ = (1, 0, 0)
-from ._core import AsyncScheduler
+from ._run import run, spawn, clock, wrap_socket
 from .exceptions import GiambioError, AlreadyJoinedError, CancelledError
 from ._traps import sleep
 from ._layers import Event
 
 __all__ = [
-    "AsyncScheduler",
     "GiambioError",
     "AlreadyJoinedError",
     "CancelledError",
     "sleep",
     "Event",
+    "run",
+    "spawn",
+    "clock",
+    "wrap_socket"
 ]

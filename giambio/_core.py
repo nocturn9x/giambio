@@ -22,7 +22,7 @@ import socket
 from .exceptions import AlreadyJoinedError, CancelledError, ResourceBusy, GiambioError
 from timeit import default_timer
 from time import sleep as wait
-from .socket import AsyncSocket, WantWrite
+from .socket import AsyncSocket, WantWrite, WantRead
 from ._layers import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from ._traps import want_read, want_write
@@ -52,11 +52,11 @@ class AsyncScheduler:
             default_timer  # Monotonic clock to keep track of elapsed time reliably
         )
         self.paused = TimeQueue(self.clock)  # Tasks that are asleep
-        self.events = {}  # All Event objects
+        self.events = set()  # All Event objects
         self._event_waiting = defaultdict(list)  # Coroutines waiting on event objects
         self.sequence = 0
 
-    def run(self):
+    def _run(self):
         """
         Starts the loop and 'listens' for events until there are either ready or asleep tasks,
         then exit. This behavior kinda reflects a kernel, as coroutines can request
@@ -84,28 +84,37 @@ class AsyncScheduler:
                     if self.current_task.status == "cancel":  # Deferred cancellation
                         self.current_task.cancelled = True
                         self.current_task.throw(CancelledError(self.current_task))
-                    method, *args = self.current_task.run(
-                        self.current_task._notify
-                    )  # Run a single step with the calculation (and awake event-waiting tasks if any)
+                    method, *args = self.current_task.run()  # Run a single step with the calculation
                     self.current_task.status = "run"
                     getattr(self, f"_{method}")(
                         *args
                     )  # Sneaky method call, thanks to David Beazley for this ;)
                     if self._event_waiting:
-                        self.check_events()
+                        self._check_events()
             except CancelledError as cancelled:
                 self.tasks.remove(cancelled.args[0])  # Remove the dead task
                 self.tasks.append(self.current_task)
             except StopIteration as e:  # Coroutine ends
                 self.current_task.result = e.args[0] if e.args else None
                 self.current_task.finished = True
-                self.reschedule_parent(self.current_task)
+                self._reschedule_parent()
             except BaseException as error:  # Coroutine raised
                 self.current_task.exc = error
-                self.reschedule_parent(self.current_task)
+                self._reschedule_parent()
                 self._join(self.current_task)
 
-    def check_events(self):
+    def clock(self):
+        """
+        Returns the current clock time for the event loop.
+        Useful to keep track of elapsed time in the terms of
+        the scheduler itself
+        :return: whatever self.clock returns
+        :rtype:
+        """
+
+        return self.clock()
+
+    def _check_events(self):
         """
         Checks for ready or expired events and triggers them
         """
@@ -113,8 +122,6 @@ class AsyncScheduler:
         for event, tasks in self._event_waiting.copy().items():
             if event._set:
                 event.event_caught = True
-                for task in tasks:
-                    task._notify = event._notify
                 self.tasks.extend(tasks + [event.notifier])
                 self._event_waiting.pop(event)
 
@@ -147,40 +154,41 @@ class AsyncScheduler:
         for key, _ in io_ready:
             self.tasks.append(key.data)  # Socket ready? Schedule the task
 
-    def create_task(self, coro: types.coroutine):
+    def spawn(self, func: types.FunctionType, *args):
         """
         Spawns a child task
         """
 
-        task = Task(coro)
+        task = Task(func(*args))
         self.tasks.append(task)
         return task
 
-    def schedule_task(self, coro: types.coroutine, n: int):
+    def spawn_after(self, func: types.FunctionType, n: int, *args):
         """
         Schedules a task for execution after n seconds
         """
 
-        task = Task(coro)
+        task = Task(func(*args))
         self.paused.put(task, n)
         return task
 
-    def start(self, coro: types.coroutine):
+    def start(self, func: types.FunctionType, *args):
         """
         Starts the event loop using a coroutine as an entry point.
         """
 
-        entry = self.create_task(coro)
-        self.run()
+        entry = self.spawn(func, *args)
+        self._run()
         self._join(entry)
         return entry
 
-    def reschedule_parent(self, coro):
+    def _reschedule_parent(self):
         """
-        Reschedules the parent task
+        Reschedules the parent task of the
+        currently running task, if any
         """
 
-        parent = self.joined.pop(coro, None)
+        parent = self.joined.pop(self.current_task, None)
         if parent:
             self.tasks.append(parent)
         return parent
@@ -200,7 +208,7 @@ class AsyncScheduler:
         self.current_task._last_io = "READ", sock
         try:
             self.selector.register(sock, EVENT_READ, self.current_task)
-        except KeyError:
+        except KeyError:   # The socket is already registered doing something else
             raise ResourceBusy("The given resource is busy!") from None
 
     def _want_write(self, sock: socket.socket):
@@ -228,10 +236,10 @@ class AsyncScheduler:
         parent task
         """
 
-        if child.cancelled:  # Task was cancelled and is therefore dead
-            self.tasks.append(self.current_task)
+        if child.cancelled or child.finished:  # Task was cancelled or has finished executing and is therefore dead
+            self._reschedule_parent()
         elif child.exc:  # Task raised an error, propagate it!
-            self.reschedule_parent(child)
+            self._reschedule_parent()
             raise child.exc
         elif child.finished:
             self.tasks.append(self.current_task)  # Task has already finished
@@ -254,27 +262,26 @@ class AsyncScheduler:
         else:
             self.tasks.append(self.current_task)
 
-    def _event_set(self, event, value):
+    def _event_set(self, event):
         """
         Sets an event
         """
 
         event.notifier = self.current_task
         event._set = True
-        event._notify = value
-        self.events[event] = value
+        self.events.add(event)
 
     def _event_wait(self, event):
         """
         Waits for an event
         """
 
-        if self.events.get(event, None):
+        if event in self.events:
             event.waiting -= 1
             if event.waiting <= 0:
-                return self.events.pop(event)
+                return self.events.remove(event)
             else:
-                return self.events[event]
+                return
         else:
             self._event_waiting[event].append(self.current_task)
 
@@ -334,6 +341,7 @@ class AsyncScheduler:
         """
 
         await want_write(sock)
+        self.selector.unregister(sock)
         return sock.close()
 
     async def _connect_sock(self, sock: socket.socket, addr: tuple):

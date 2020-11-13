@@ -1,30 +1,35 @@
 import giambio
 
 
-async def child(notifier: giambio.Event, reply: giambio.Event, pause: int):
-    print("[child] Child is alive! Going to sleep until notified")
-    notification = await notifier.pause()
-    print(f"[child] Parent said: '{notification}', replying in {pause} seconds")
+# A test for events
+
+
+async def child(notifier: giambio.Event, pause: int):
+    print("[child] Child is alive! Going to wait until notified")
+    start_total = giambio.clock()
+    await notifier.pause()
+    end_pause = giambio.clock() - start_total
+    print(f"[child] Parent set the event, exiting in {pause} seconds")
+    start_sleep = giambio.clock() - start_total
     await giambio.sleep(pause)
-    print("[child] Replying to parent")
-    await reply.set("Hi daddy!")
+    end_sleep = giambio.clock() - start_sleep
+    end_total = giambio.clock() - start_total
+    print(f"[child] Done! Slept for {end_total} seconds total ({end_pause} paused, {end_sleep} sleeping), nice nap!")
 
 
 async def parent(pause: int = 1):
     event = giambio.Event()
-    reply = giambio.Event()
     print("[parent] Spawning child task")
-    task = scheduler.create_task(child(event, reply, pause))
+    task = giambio.spawn(child, event, pause + 2)
+    start = giambio.clock()
     print(f"[parent] Sleeping {pause} second(s) before setting the event")
     await giambio.sleep(pause)
-    await event.set("Hi, my child")
-    print("[parent] Event set, awaiting reply")
-    reply = await reply.pause()
-    print(f"[parent] Child replied: '{reply}'")
+    await event.set()
+    print("[parent] Event set, awaiting child")
     await task.join()
-    print("[parent] Child exited")
+    end = giambio.clock() - start
+    print(f"[parent] Child exited in {end} seconds")
 
 
 if __name__ == "__main__":
-    scheduler = giambio.AsyncScheduler()
-    scheduler.start(parent(5))
+    giambio.run(parent, 3)

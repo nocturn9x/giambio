@@ -32,7 +32,6 @@ class Task:
         self.finished = False
         self.status = "init"  # This is useful for cancellation
         self._last_io = None
-        self._notify = None
 
     def run(self, what=None):
         """Simple abstraction layer over the coroutines ``send`` method"""
@@ -61,24 +60,25 @@ class Task:
 
 
 class Event:
-    """A class designed similarly to threading.Event, but with more features"""
+    """A class designed similarly to threading.Event"""
 
     def __init__(self):
         """Object constructor"""
 
         self._set = False
-        self._notify = None
         self.event_caught = False
         self.timeout = None
         self.waiting = 0
 
-    async def set(self, value=True):
-        """Sets the event, optionally taking a value. This can be used
-        to control tasks' flow by 'sending' commands back and fort"""
+    async def set(self):
+        """
+        Sets the event, waking up all tasks that called
+        pause() on this event
+        """
 
         if self._set:
             raise GiambioError("The event has already been set")
-        await event_set(self, value)
+        await event_set(self)
 
     async def pause(self):
         """Waits until the event is set and returns a value"""
@@ -88,8 +88,10 @@ class Event:
 
 
 class TimeQueue:
-    """An abstraction layer over a heap queue based on time. This is where
-    sleeping tasks will be put when they are asleep"""
+    """
+    An abstraction layer over a heap queue based on time. This is where
+    sleeping tasks will be put when they are not running
+    """
 
     def __init__(self, clock):
         self.clock = clock
@@ -112,8 +114,17 @@ class TimeQueue:
         return f"TimeQueue({self.container}, clock={self.clock})"
 
     def put(self, item, amount):
+        """
+        Pushes an item onto the queue with its unique
+        time amount and ID
+        """
+
         heappush(self.container, (self.clock() + amount, self.sequence, item))
         self.sequence += 1
 
     def get(self):
+        """
+        Gets the first task that is meant to run
+        """
+
         return heappop(self.container)[2]

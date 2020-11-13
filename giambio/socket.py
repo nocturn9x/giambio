@@ -81,12 +81,10 @@ class AsyncSocket(object):
         await self.loop._connect_sock(self.sock, addr)
 
     async def __aenter__(self):
-        await sleep(0)
         return self.sock.__enter__()
 
-    async def __aexit__(self, *args):
-        await sleep(0)
-        return self.sock.__exit__(*args)
+    async def __aexit__(self, *_):
+        await self.close()
 
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
