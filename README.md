@@ -35,7 +35,7 @@ Starting to see where we're heading?
 
 giambio has been designed with simplicity in mind, so this README won't explain all the gritty details about _how_ async is 
 implemented in Python (you might want to check out [this article](https://snarky.ca/how-the-heck-does-async-await-work-in-python-3-5/) if you want to learn more about all the implementation details).
-For the sake of this tutorial, all you need to know is that functions defined giambio is all about a feature added in Python 3.5:
+For the sake of this tutorial, all you need to know is that giambio is all about a feature added in Python 3.5:
 asynchronous functions, or 'async' for short.
 Async functions are functions defined with `async def` instead of the regular `def`, like so:
 ```python
