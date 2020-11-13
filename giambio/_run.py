@@ -15,9 +15,10 @@ limitations under the License.
 """
 
 import threading
+from ._core import AsyncScheduler
 from ._layers import Task
 from .socket import AsyncSocket
-from types import FunctionType
+from types import FunctionType, CoroutineType, GeneratorType
 import socket
 
 
@@ -29,6 +30,11 @@ def run(func: FunctionType, *args) -> Task:
     Starts the event loop from a synchronous entry point
     """
 
+    if isinstance(func, (CoroutineType, GeneratorType)):
+        raise RuntimeError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
+                           "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
+    if not hasattr(thread_local, "loop"):
+        thread_local.loop = AsyncScheduler()
     return thread_local.loop.start(func, *args)
 
 
@@ -47,7 +53,14 @@ def spawn(func: FunctionType, *args):
     loop
     """
 
-    return thread_local.loop.spawn(func, *args)
+    if isinstance(func, (CoroutineType, GeneratorType)):
+        raise RuntimeError("Looks like you tried to call giambio.spawn(your_func(arg1, arg2, ...)), that is wrong!"
+                           "\nWhat you wanna do, instead, is this: giambio.spawn(your_func, arg1, arg2, ...)")
+    try:
+        return thread_local.loop.spawn(func, *args)
+    except AttributeError:
+        raise RuntimeError("It appears that giambio is not running, did you call giambio.spawn(...)"
+                           " outside of an async context?") from None
 
 
 def wrap_socket(sock: socket.socket) -> AsyncSocket:

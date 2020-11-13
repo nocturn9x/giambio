@@ -1,26 +1,25 @@
 import giambio
 
 
-# A test to see if tasks are properly joined
-
-
-async def child(sleep: int):
-    start = giambio.clock()
-    print(f"[child] Gonna sleep for {sleep} seconds!")
+async def child(sleep: int, ident: int):
+    start = giambio.clock()   # This returns the current time from giambio's perspective
+    print(f"[child {ident}] Gonna sleep for {sleep} seconds!")
     await giambio.sleep(sleep)
     end = giambio.clock() - start
-    print(f"[child] I woke up! Slept for {end} seconds")
+    print(f"[child {ident}] I woke up! Slept for {end} seconds")
 
 
 async def main():
-    print("[parent] Spawning child")
-    task = giambio.spawn(child, 5)
+    print("[parent] Spawning children")
+    task = giambio.spawn(child, 1, 1)   # We spawn a child task
+    task2 = giambio.spawn(child, 2, 2)  # and why not? another one!
     start = giambio.clock()
-    print("[parent] Child spawned, awaiting completion")
+    print("[parent] Children spawned, awaiting completion")
     await task.join()
+    await task2.join()
     end = giambio.clock() - start
-    print(f"[parent] Child exited in {end} seconds")
+    print(f"[parent] Execution terminated in {end} seconds")
 
 
 if __name__ == "__main__":
-    giambio.run(main)
+    giambio.run(main)    # Start the async context
