@@ -3,7 +3,7 @@
 giambio is an event-driven concurrency library meant* to perform efficient and high-performant I/O multiplexing.
 This library implements what is known as a _stackless mode of execution_, or
 "green threads", though the latter term is misleading as **no multithreading is involved** (at least not by default).
-        
+
 
 _*_: The library *works* (sometimes), but its still in its very early stages and is nowhere close being
 production ready, so be aware that it is likely that you'll find bugs and race conditions
@@ -12,6 +12,7 @@ production ready, so be aware that it is likely that you'll find bugs and race c
 
 Right now this is nothing more than a toy implementation to help me understand how this whole `async`/`await` thing works
 and it is pretty much guaranteed to explode spectacularly badly while using it. If you find any bugs, please report them!
+
 Oh and by the way, this project was hugely inspired by the [curio](https://github.com/dabeaz/curio) and the
 [trio](https://github.com/python-trio/trio) projects, you might want to have a look at their amazing work if you need a
 rock-solid and structured concurrency framework (I personally recommend trio and that's definitely not related to the fact
@@ -27,7 +28,7 @@ actually might be a good choice when it comes to I/O for reasons that span far b
 If you choose to use threads, there are a couple things you can do, involving what is known as _thread synchronization 
 primitives_ and _thread pools_, but once again that is beyond the purposes of this quickstart guide.
 A library like giambio comes into play when you need to perform lots of [blocking operations](https://en.wikipedia.org/wiki/Blocking_(computing))
-and network servers, among other things, happens to rely heavily on I/O which is a blocking operation. 
+and network servers, among other things, happen to be heavily based on I/O: a blocking operation. 
 Starting to see where we're heading?
 
 
@@ -50,6 +51,7 @@ def sync_fun():     # A regular (sync) function
 First of all, async functions like to stick together: to call an async function you need to put `await` in front of it, like below:
 
 ```python
+
 async def async_two():
     print("Hello from async_two!")
    
@@ -69,7 +71,9 @@ regular functions: after all, their ability to call other async functions seems 
 Take a look at this example below: 
 
 ```python
+
 import giambio
+
 
 async def foo():
     print("Hello, world!")
@@ -81,8 +85,10 @@ giambio.run(foo)   # Prints 'Hello, world!'
 This could as well be written the following way and would produce the same output:
 
 ```python
+
 def foo():
     print("Hello, world!")
+
 
 foo()   # Prints 'Hello, world!'
 ```
@@ -98,6 +104,7 @@ so far. Don't worry, that is intentional: giambio never lets a user deal with co
 model is much simpler if we take coroutines out of the game, and everything works just the same.
 
 ```python
+
 import giambio
 
 
@@ -118,6 +125,7 @@ As we already learned, async functions can only be called with the `await` keywo
 doing so would raise an error, but it's actually a little bit trickier than that. Take this example here
 
 ```python
+
 import giambio
 
 
@@ -180,6 +188,7 @@ Yep, you read that right. To demnostrate this, have a look a this example
 
 
 ```python
+
 import giambio
 
 
@@ -230,6 +239,7 @@ TODO
 TODO
 
 ```python
+
 import giambio
 from giambio.socket import AsyncSocket
 import socket
