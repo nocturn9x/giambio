@@ -184,7 +184,7 @@ Our previous examples could be written using sync functions (like `time.sleep`) 
 quite useful is it?
 
 But here comes the reason why you would want to use a library like giambio: it can run multiple async functions __at the same time__.
-Yep, you read that right. To demnostrate this, have a look a this example
+Yep, you read that right. To demonstrate this, have a look a this example
 
 
 ```python
