@@ -51,7 +51,6 @@ class TaskManager:
         return task
 
     async def __aenter__(self):
-        self.loop.catch = True  # Restore event loop's status
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -59,12 +58,11 @@ class TaskManager:
             try:
                 await task.join()
             except BaseException as e:
-                for task in self.loop.tasks:
-                    await task.cancel()
-                for _, __, task in self.loop.paused:
-                    await task.cancel()
-                for tasks in self.loop.event_waiting.values():
-                    for task in tasks:
-                        await task.cancel()
-                self.loop.catch = False
+                for running_task in self.loop.tasks:
+                    await running_task.cancel()
+                for _, __, asleep_task in self.loop.paused:
+                    await asleep_task.cancel()
+                for waiting_tasks in self.loop.event_waiting.values():
+                    for waiting_task in waiting_tasks:
+                        await waiting_task.cancel()
                 raise e

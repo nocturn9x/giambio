@@ -7,29 +7,26 @@ import sys
 
 # A test to check for asynchronous I/O
 
-logging.basicConfig(
-    level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p"
-)
 
-
-async def server(address: tuple):
+async def serve(address: tuple):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(address)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.listen(5)
     asock = giambio.wrap_socket(sock)   # We make the socket an async socket
-    logging.info(f"Echo server serving asynchronously at {address}")
+    logging.info(f"Serving asynchronously at {address[0]}:{address[1]}")
     while True:
         try:
-            async with giambio.async_pool() as pool:
+            async with giambio.create_pool() as pool:
                 conn, addr = await asock.accept()
-                logging.info(f"{addr} connected")
-                pool.spawn(echo_handler, conn, addr)
+                logging.info(f"{addr[0]}:{addr[1]} connected")
+                pool.spawn(handler, conn, addr)
         except TypeError:
             print("Looks like we have a naughty boy here!")
 
 
-async def echo_handler(sock: AsyncSocket, addr: tuple):
+async def handler(sock: AsyncSocket, addr: tuple):
+    addr = f"{addr[0]}:{addr[1]}"
     async with sock:
         await sock.send_all(b"Welcome to the server pal, feel free to send me something!\n")
         while True:
@@ -49,11 +46,12 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        port = int(sys.argv[1])
-    else:
-        port = 1500
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 1500
+    logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
     try:
-        giambio.run(server, ("", port))
+        giambio.run(serve, ("localhost", port))
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
-        print(f"Exiting due to a {type(error).__name__}: '{error}'")
+        if isinstance(error, KeyboardInterrupt):
+            logging.info("Ctrl+C detected, exiting")
+        else:
+            logging.error(f"Exiting due to a {type(error).__name__}: {error}")

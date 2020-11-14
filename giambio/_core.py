@@ -26,6 +26,7 @@ from .socket import AsyncSocket, WantWrite, WantRead
 from ._layers import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from ._traps import want_read, want_write
+import traceback, sys
 
 
 class AsyncScheduler:
@@ -45,13 +46,13 @@ class AsyncScheduler:
         self.tasks = []  # Tasks that are ready to run
         self.selector = DefaultSelector()  # Selector object to perform I/O multiplexing
         self.current_task = None  # This will always point to the currently running coroutine (Task object)
-        self.catch = True
         self.joined = (
             {}
         )  # Maps child tasks that need to be joined their respective parent task
         self.clock = (
             default_timer  # Monotonic clock to keep track of elapsed time reliably
         )
+        self.some_cancel = False
         self.paused = TimeQueue(self.clock)  # Tasks that are asleep
         self.events = set()  # All Event objects
         self.event_waiting = defaultdict(list)  # Coroutines waiting on event objects
@@ -82,30 +83,37 @@ class AsyncScheduler:
                         self._check_events()
                 while self.tasks:  # While there are tasks to run
                     self.current_task = self.tasks.pop(0)
+                    if self.some_cancel:
+                        self._check_cancel()
                     # Sets the currently running task
-                    if self.current_task.status == "cancel":  # Deferred cancellation
-                        self.current_task.cancelled = True
-                        self.current_task.throw(CancelledError(self.current_task))
                     method, *args = self.current_task.run()  # Run a single step with the calculation
                     self.current_task.status = "run"
                     getattr(self, f"_{method}")(*args)
                     # Sneaky method call, thanks to David Beazley for this ;)
-            except CancelledError as cancelled:
-                if cancelled.args[0] in self.tasks:
-                    self.tasks.remove(cancelled.args[0])  # Remove the dead task
-                self.tasks.append(self.current_task)
+            except CancelledError:
+                self.current_task.cancelled = True
+                self._reschedule_parent()
             except StopIteration as e:  # Coroutine ends
                 self.current_task.result = e.args[0] if e.args else None
                 self.current_task.finished = True
                 self._reschedule_parent()
+            except RuntimeError:
+                continue
             except BaseException as error:  # Coroutine raised
+                print(error)
                 self.current_task.exc = error
-                if self.catch:
-                    self._reschedule_parent()
-                    self._join(self.current_task)
-                else:
-                    if not isinstance(error, RuntimeError):
-                        raise
+                self._reschedule_parent()
+                self._join(self.current_task)
+                raise
+
+    def _check_cancel(self):
+        """
+        Checks for task cancellation
+        """
+
+        if self.current_task.status == "cancel":  # Deferred cancellation
+            self.current_task.cancelled = True
+            self.current_task.throw(CancelledError(self.current_task))
 
     def _check_events(self):
         """
@@ -126,7 +134,7 @@ class AsyncScheduler:
         wait(max(0.0, self.paused[0][0] - self.clock()))
         # Sleep until the closest deadline in order not to waste CPU cycles
         while self.paused[0][0] < self.clock():
-        # Reschedules tasks when their deadline has elapsed
+            # Reschedules tasks when their deadline has elapsed
             self.tasks.append(self.paused.get())
             if not self.paused:
                 break
@@ -150,7 +158,7 @@ class AsyncScheduler:
 
         entry = Task(func(*args))
         self.tasks.append(entry)
-        self._join(entry)
+        self._join(entry)   # TODO -> Inspect this line, does it actually do anything useful?
         self._run()
         return entry
 
@@ -261,12 +269,9 @@ class AsyncScheduler:
         are independent
         """
 
-        if task.status in ("sleep", "I/O") and not task.cancelled:
-            # It is safe to cancel a task while blocking
-            task.cancelled = True
-            task.throw(CancelledError(task))
-        elif task.status == "run":
-            task.status = "cancel"  # Cancellation is deferred
+        if not self.some_cancel:
+            self.some_cancel = True
+        task.status = "cancel"  # Cancellation is deferred
 
     def wrap_socket(self, sock):
         """
@@ -282,6 +287,10 @@ class AsyncScheduler:
         """
 
         await want_read(sock)
+        try:
+            return sock.recv(buffer)
+        except WantRead:
+            await want_write(sock)
         return sock.recv(buffer)
 
     async def _accept_sock(self, sock: socket.socket):

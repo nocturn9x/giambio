@@ -55,12 +55,11 @@ class Task:
             raise self.exc
         return res
 
-
     async def cancel(self):
         """Cancels the task"""
 
         await cancel(self)
-        assert self.cancelled, "Task ignored cancellation"
+        # await join(self)   # TODO -> Join ourselves after cancellation?
 
     def __repr__(self):
         """Implements repr(self)"""

@@ -24,7 +24,6 @@ from ._traps import sleep
 
 try:
     from ssl import SSLWantReadError, SSLWantWriteError
-
     WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
     WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
 except ImportError:
