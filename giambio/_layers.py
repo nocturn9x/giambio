@@ -46,12 +46,21 @@ class Task:
     async def join(self):
         """Joins the task"""
 
-        return await join(self)
+        if self.cancelled and not self.exc:
+            return None
+        if self.exc:
+            raise self.exc
+        res = await join(self)
+        if self.exc:
+            raise self.exc
+        return res
+
 
     async def cancel(self):
         """Cancels the task"""
 
         await cancel(self)
+        assert self.cancelled, "Task ignored cancellation"
 
     def __repr__(self):
         """Implements repr(self)"""

@@ -39,6 +39,7 @@ def sleep(seconds: int):
     :type seconds: int
     """
 
+    assert seconds >= 0, "The time delay can't be negative"
     yield "sleep", seconds
 
 

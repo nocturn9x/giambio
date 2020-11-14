@@ -1,9 +1,9 @@
 import giambio
-import traceback
 from giambio.socket import AsyncSocket
 import socket
 import logging
 import sys
+
 
 # A test to check for asynchronous I/O
 
@@ -20,10 +20,13 @@ async def server(address: tuple):
     asock = giambio.wrap_socket(sock)   # We make the socket an async socket
     logging.info(f"Echo server serving asynchronously at {address}")
     while True:
-        conn, addr = await asock.accept()
-        logging.info(f"{addr} connected")
-        task = giambio.spawn(echo_handler, conn, addr)
-        # await task.join()   # TODO: Joining I/O tasks seems broken
+        try:
+            async with giambio.async_pool() as pool:
+                conn, addr = await asock.accept()
+                logging.info(f"{addr} connected")
+                pool.spawn(echo_handler, conn, addr)
+        except TypeError:
+            print("Looks like we have a naughty boy here!")
 
 
 async def echo_handler(sock: AsyncSocket, addr: tuple):
@@ -46,9 +49,11 @@ async def echo_handler(sock: AsyncSocket, addr: tuple):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        port = int(sys.argv[1])
+    else:
+        port = 1500
     try:
-        giambio.run(server, ("", 1501))
-    except BaseException as error:  # Exceptions propagate!
-        print(f"Exiting due to a {type(error).__name__}: '{error}'", end=" ")
-        print("traceback below (or above, or in the middle, idk async is weird)")
-        traceback.print_exception(*sys.exc_info())
+        giambio.run(server, ("", port))
+    except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
+        print(f"Exiting due to a {type(error).__name__}: '{error}'")

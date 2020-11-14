@@ -26,7 +26,7 @@ class AlreadyJoinedError(GiambioError):
 
 
 class CancelledError(BaseException):
-    """Exception raised as a result of the giambio.core.cancel() method"""
+    """Exception raised by the giambio._layers.Task.cancel() method"""
 
     def __repr__(self):
         return "giambio.exceptions.CancelledError"

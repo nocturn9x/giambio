@@ -17,6 +17,7 @@ limitations under the License.
 import threading
 from ._core import AsyncScheduler
 from ._layers import Task
+from ._managers import TaskManager
 from .socket import AsyncSocket
 from types import FunctionType, CoroutineType, GeneratorType
 import socket
@@ -33,7 +34,9 @@ def run(func: FunctionType, *args) -> Task:
     if isinstance(func, (CoroutineType, GeneratorType)):
         raise RuntimeError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
                            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
-    if not hasattr(thread_local, "loop"):
+    try:
+        return thread_local.loop.start(func, *args)
+    except AttributeError:
         thread_local.loop = AsyncScheduler()
     return thread_local.loop.start(func, *args)
 
@@ -47,25 +50,21 @@ def clock():
     return thread_local.loop.clock()
 
 
-def spawn(func: FunctionType, *args):
-    """
-    Spawns a child task in the current event
-    loop
-    """
-
-    if isinstance(func, (CoroutineType, GeneratorType)):
-        raise RuntimeError("Looks like you tried to call giambio.spawn(your_func(arg1, arg2, ...)), that is wrong!"
-                           "\nWhat you wanna do, instead, is this: giambio.spawn(your_func, arg1, arg2, ...)")
-    try:
-        return thread_local.loop.spawn(func, *args)
-    except AttributeError:
-        raise RuntimeError("It appears that giambio is not running, did you call giambio.spawn(...)"
-                           " outside of an async context?") from None
-
-
 def wrap_socket(sock: socket.socket) -> AsyncSocket:
     """
     Wraps a synchronous socket into a giambio.socket.AsyncSocket
     """
 
     return thread_local.loop.wrap_socket(sock)
+
+
+def create_pool():
+    """
+    Creates an async pool
+    """
+
+    try:
+        return TaskManager(thread_local.loop)
+    except AttributeError:
+        raise RuntimeError("It appears that giambio is not running, did you call giambio.async_pool()"
+                           " outside of an async context?") from None

@@ -16,7 +16,7 @@ limitations under the License.
 
 # Import libraries and internal resources
 import types
-from collections import deque, defaultdict
+from collections import defaultdict
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
 from .exceptions import AlreadyJoinedError, CancelledError, ResourceBusy, GiambioError
@@ -42,9 +42,10 @@ class AsyncScheduler:
     def __init__(self):
         """Object constructor"""
 
-        self.tasks = deque()  # Tasks that are ready to run
+        self.tasks = []  # Tasks that are ready to run
         self.selector = DefaultSelector()  # Selector object to perform I/O multiplexing
         self.current_task = None  # This will always point to the currently running coroutine (Task object)
+        self.catch = True
         self.joined = (
             {}
         )  # Maps child tasks that need to be joined their respective parent task
@@ -53,7 +54,7 @@ class AsyncScheduler:
         )
         self.paused = TimeQueue(self.clock)  # Tasks that are asleep
         self.events = set()  # All Event objects
-        self._event_waiting = defaultdict(list)  # Coroutines waiting on event objects
+        self.event_waiting = defaultdict(list)  # Coroutines waiting on event objects
         self.sequence = 0
 
     def _run(self):
@@ -67,32 +68,31 @@ class AsyncScheduler:
         while True:
             try:
                 if not self.selector.get_map() and not any(
-                    [self.paused, self.tasks, self._event_waiting]
+                    [self.paused, self.tasks, self.event_waiting]
                 ):  # If there is nothing to do, just exit
                     break
-                if not self.tasks:
-                    if (
-                        self.paused
-                    ):  # If there are no actively running tasks, we try to schedule the asleep ones
+                elif not self.tasks:
+                    if self.paused:
+                        # If there are no actively running tasks, we try to schedule the asleep ones
                         self._check_sleeping()
-                if self.selector.get_map():
-                    self._check_io()    # The next step is checking for I/O
+                    if self.selector.get_map():
+                        self._check_io()    # The next step is checking for I/O
+                    if self.event_waiting:
+                        # Try to awake event-waiting tasks
+                        self._check_events()
                 while self.tasks:  # While there are tasks to run
-                    self.current_task = (
-                        self.tasks.popleft()
-                    )  # Sets the currently running task
+                    self.current_task = self.tasks.pop(0)
+                    # Sets the currently running task
                     if self.current_task.status == "cancel":  # Deferred cancellation
                         self.current_task.cancelled = True
                         self.current_task.throw(CancelledError(self.current_task))
                     method, *args = self.current_task.run()  # Run a single step with the calculation
                     self.current_task.status = "run"
-                    getattr(self, f"_{method}")(
-                        *args
-                    )  # Sneaky method call, thanks to David Beazley for this ;)
-                    if self._event_waiting:
-                        self._check_events()
+                    getattr(self, f"_{method}")(*args)
+                    # Sneaky method call, thanks to David Beazley for this ;)
             except CancelledError as cancelled:
-                self.tasks.remove(cancelled.args[0])  # Remove the dead task
+                if cancelled.args[0] in self.tasks:
+                    self.tasks.remove(cancelled.args[0])  # Remove the dead task
                 self.tasks.append(self.current_task)
             except StopIteration as e:  # Coroutine ends
                 self.current_task.result = e.args[0] if e.args else None
@@ -100,42 +100,33 @@ class AsyncScheduler:
                 self._reschedule_parent()
             except BaseException as error:  # Coroutine raised
                 self.current_task.exc = error
-                self._reschedule_parent()
-                self._join(self.current_task)
-
-    def clock(self):
-        """
-        Returns the current clock time for the event loop.
-        Useful to keep track of elapsed time in the terms of
-        the scheduler itself
-        :return: whatever self.clock returns
-        :rtype:
-        """
-
-        return self.clock()
+                if self.catch:
+                    self._reschedule_parent()
+                    self._join(self.current_task)
+                else:
+                    if not isinstance(error, RuntimeError):
+                        raise
 
     def _check_events(self):
         """
         Checks for ready or expired events and triggers them
         """
 
-        for event, tasks in self._event_waiting.copy().items():
+        for event, tasks in self.event_waiting.copy().items():
             if event._set:
                 event.event_caught = True
                 self.tasks.extend(tasks + [event.notifier])
-                self._event_waiting.pop(event)
+                self.event_waiting.pop(event)
 
     def _check_sleeping(self):
         """
         Checks and reschedules sleeping tasks
         """
 
-        wait(
-            max(0.0, self.paused[0][0] - self.clock())
-        )  # Sleep until the closest deadline in order not to waste CPU cycles
-        while (
-            self.paused[0][0] < self.clock()
-        ):  # Reschedules tasks when their deadline has elapsed
+        wait(max(0.0, self.paused[0][0] - self.clock()))
+        # Sleep until the closest deadline in order not to waste CPU cycles
+        while self.paused[0][0] < self.clock():
+        # Reschedules tasks when their deadline has elapsed
             self.tasks.append(self.paused.get())
             if not self.paused:
                 break
@@ -145,41 +136,22 @@ class AsyncScheduler:
         Checks and schedules task to perform I/O
         """
 
-        timeout = (
-            0.0 if self.tasks else None
-        )  # If there are no tasks ready wait indefinitely
-        io_ready = self.selector.select(
-            timeout
-        )  # Get sockets that are ready and schedule their tasks
+        timeout = 0.0 if self.tasks else None
+        # If there are no tasks ready wait indefinitely
+        io_ready = self.selector.select(timeout)
+        # Get sockets that are ready and schedule their tasks
         for key, _ in io_ready:
-            self.tasks.append(key.data)  # Socket ready? Schedule the task
-
-    def spawn(self, func: types.FunctionType, *args):
-        """
-        Spawns a child task
-        """
-
-        task = Task(func(*args))
-        self.tasks.append(task)
-        return task
-
-    def spawn_after(self, func: types.FunctionType, n: int, *args):
-        """
-        Schedules a task for execution after n seconds
-        """
-
-        task = Task(func(*args))
-        self.paused.put(task, n)
-        return task
+            self.tasks.append(key.data)  # Resource ready? Schedule its task
 
     def start(self, func: types.FunctionType, *args):
         """
-        Starts the event loop using a coroutine as an entry point.
+        Starts the event loop from a sync context
         """
 
-        entry = self.spawn(func, *args)
-        self._run()
+        entry = Task(func(*args))
+        self.tasks.append(entry)
         self._join(entry)
+        self._run()
         return entry
 
     def _reschedule_parent(self):
@@ -236,12 +208,9 @@ class AsyncScheduler:
         parent task
         """
 
-        if child.cancelled or child.finished:  # Task was cancelled or has finished executing and is therefore dead
+        if child.cancelled or child.exc:  # Task was cancelled or has errored
             self._reschedule_parent()
-        elif child.exc:  # Task raised an error, propagate it!
-            self._reschedule_parent()
-            raise child.exc
-        elif child.finished:
+        elif child.finished:    # Task finished running
             self.tasks.append(self.current_task)  # Task has already finished
         else:
             if child not in self.joined:
@@ -283,7 +252,7 @@ class AsyncScheduler:
             else:
                 return
         else:
-            self._event_waiting[event].append(self.current_task)
+            self.event_waiting[event].append(self.current_task)
 
     def _cancel(self, task):
         """
@@ -292,9 +261,8 @@ class AsyncScheduler:
         are independent
         """
 
-        if (
-            task.status in ("sleep", "I/O") and not task.cancelled
-        ):  # It is safe to cancel a task while blocking
+        if task.status in ("sleep", "I/O") and not task.cancelled:
+            # It is safe to cancel a task while blocking
             task.cancelled = True
             task.throw(CancelledError(task))
         elif task.status == "run":
