@@ -3,6 +3,7 @@ from giambio.socket import AsyncSocket
 import socket
 import logging
 import sys
+import traceback
 
 
 # A test to check for asynchronous I/O
@@ -15,14 +16,10 @@ async def serve(address: tuple):
     sock.listen(5)
     asock = giambio.wrap_socket(sock)   # We make the socket an async socket
     logging.info(f"Serving asynchronously at {address[0]}:{address[1]}")
-    while True:
-        try:
-            async with giambio.create_pool() as pool:
-                conn, addr = await asock.accept()
-                logging.info(f"{addr[0]}:{addr[1]} connected")
-                pool.spawn(handler, conn, addr)
-        except TypeError:
-            print("Looks like we have a naughty boy here!")
+    async with giambio.create_pool() as pool:
+        conn, addr = await asock.accept()
+        logging.info(f"{addr[0]}:{addr[1]} connected")
+        pool.spawn(handler, conn, addr)
 
 
 async def handler(sock: AsyncSocket, addr: tuple):
@@ -51,6 +48,7 @@ if __name__ == "__main__":
     try:
         giambio.run(serve, ("localhost", port))
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
+        raise
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")
         else:

@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from ._core import AsyncScheduler
-from ._layers import Task
+
 import types
+from .core import AsyncScheduler
+from .objects import Task
 
 
 class TaskManager:
@@ -30,15 +31,17 @@ class TaskManager:
         """
 
         self.loop = loop
+        self.tasks = []
 
     def spawn(self, func: types.FunctionType, *args):
         """
         Spawns a child task
         """
 
-        task = Task(func(*args))
+        task = Task(func(*args), func.__name__ or str(func))
+        task.parent = self.loop.current_task
         self.loop.tasks.append(task)
-        return task
+        self.tasks.append(task)
 
     def spawn_after(self, func: types.FunctionType, n: int, *args):
         """
@@ -46,23 +49,19 @@ class TaskManager:
         """
 
         assert n >= 0, "The time delay can't be negative"
-        task = Task(func(*args))
+        task = Task(func(*args), func.__name__ or str(func))
+        task.parent = self.loop.current_task
         self.loop.paused.put(task, n)
-        return task
+        self.tasks.append(task)
 
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        for task in self.loop.tasks:
+        for task in self.tasks:
             try:
                 await task.join()
-            except BaseException as e:
-                for running_task in self.loop.tasks:
-                    await running_task.cancel()
-                for _, __, asleep_task in self.loop.paused:
-                    await asleep_task.cancel()
-                for waiting_tasks in self.loop.event_waiting.values():
-                    for waiting_task in waiting_tasks:
-                        await waiting_task.cancel()
-                raise e
+            except BaseException as task_error:
+                for dead in self.tasks:
+                    await dead.cancel()
+                raise task.exc

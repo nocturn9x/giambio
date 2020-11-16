@@ -15,65 +15,79 @@ limitations under the License.
 """
 
 import types
-from ._traps import join, cancel, event_set, event_wait
+from .traps import join, cancel, event_set, event_wait
 from heapq import heappop, heappush
 from .exceptions import GiambioError
+from dataclasses import dataclass, field
 
 
+@dataclass
 class Task:
 
-    """A simple wrapper around a coroutine object"""
+    """
+    A simple wrapper around a coroutine object
+    """
 
-    def __init__(self, coroutine: types.coroutine):
-        self.coroutine = coroutine
-        self.cancelled = False  # True if the task gets cancelled
-        self.exc = None
-        self.result = None
-        self.finished = False
-        self.status = "init"  # This is useful for cancellation
-        self._last_io = None
+    coroutine: types.CoroutineType
+    name: str
+    cancelled: bool = False  # True if the task gets cancelled
+    exc: BaseException = None
+    result: object = None
+    finished: bool = False
+    status: str = "init"
+    steps: int = 0
+    last_io: tuple = ()
+    parent: object = None
+    joined: bool= False
+    cancel_pending: bool = False
+    waiters: list = field(default_factory=list)
 
     def run(self, what=None):
-        """Simple abstraction layer over the coroutines ``send`` method"""
+        """
+        Simple abstraction layer over coroutines' ``send`` method
+        """
 
         return self.coroutine.send(what)
 
     def throw(self, err: Exception):
-        """Simple abstraction layer over the coroutines ``throw`` method"""
+        """
+        Simple abstraction layer over coroutines ``throw`` method
+        """
 
         return self.coroutine.throw(err)
 
     async def join(self):
-        """Joins the task"""
+        """
+        Joins the task
+        """
 
-        if self.cancelled and not self.exc:
-            return None
-        if self.exc:
-            raise self.exc
         res = await join(self)
         if self.exc:
             raise self.exc
         return res
 
     async def cancel(self):
-        """Cancels the task"""
+        """
+        Cancels the task
+        """
 
         await cancel(self)
-        # await join(self)   # TODO -> Join ourselves after cancellation?
 
-    def __repr__(self):
-        """Implements repr(self)"""
-
-        return f"Task({self.coroutine}, cancelled={self.cancelled}, exc={repr(self.exc)}, result={self.result}, finished={self.finished}, status={self.status})"
+    def __del__(self):
+        self.coroutine.close()
 
 
 class Event:
-    """A class designed similarly to threading.Event"""
+    """
+    A class designed similarly to threading.Event
+    """
 
     def __init__(self):
-        """Object constructor"""
+        """
+        Object constructor
+        """
 
-        self._set = False
+        self.set = False
         self.event_caught = False
         self.timeout = None
         self.waiting = 0
@@ -81,18 +95,20 @@ class Event:
     async def set(self):
         """
         Sets the event, waking up all tasks that called
-        pause() on this event
+        pause() on us
         """
 
-        if self._set:
+        if self.set:
             raise GiambioError("The event has already been set")
         await event_set(self)
 
     async def pause(self):
-        """Waits until the event is set and returns a value"""
+        """
+        Waits until the event is set
+        """
 
         self.waiting += 1
-        return await event_wait(self)
+        await event_wait(self)
 
 
 class TimeQueue:
@@ -102,6 +118,10 @@ class TimeQueue:
     """
 
     def __init__(self, clock):
+        """
+        Object constructor
+        """
+
         self.clock = clock
         self.sequence = 0
         self.container = []

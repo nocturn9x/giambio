@@ -20,8 +20,9 @@ limitations under the License.
 
 import socket
 from .exceptions import ResourceClosed
-from ._traps import sleep
+from .traps import sleep
 
+# Stolen from curio
 try:
     from ssl import SSLWantReadError, SSLWantWriteError
     WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
@@ -32,7 +33,9 @@ except ImportError:
 
 
 class AsyncSocket(object):
-    """Abstraction layer for asynchronous sockets"""
+    """
+    Abstraction layer for asynchronous sockets
+    """
 
     def __init__(self, sock: socket.socket, loop):
         self.sock = sock
@@ -41,46 +44,54 @@ class AsyncSocket(object):
         self._closed = False
 
     async def receive(self, max_size: int):
-        """Receives up to max_size from a socket asynchronously"""
+        """
+        Receives up to max_size from a socket asynchronously
+        """
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        self.loop.current_task.status = "I/O"
-        return await self.loop._read_sock(self.sock, max_size)
+        return await self.loop.read_sock(self.sock, max_size)
 
     async def accept(self):
-        """Accepts the socket, completing the 3-step TCP handshake asynchronously"""
+        """
+        Accepts the socket, completing the 3-step TCP handshake asynchronously
+        """
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        to_wrap = await self.loop._accept_sock(self.sock)
+        to_wrap = await self.loop.accept_sock(self.sock)
         return self.loop.wrap_socket(to_wrap[0]), to_wrap[1]
 
     async def send_all(self, data: bytes):
-        """Sends all data inside the buffer asynchronously until it is empty"""
+        """
+        Sends all data inside the buffer asynchronously until it is empty
+        """
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        return await self.loop._sock_sendall(self.sock, data)
+        return await self.loop.sock_sendall(self.sock, data)
 
     async def close(self):
-        """Closes the socket asynchronously"""
+        """
+        Closes the socket asynchronously
+        """
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await sleep(0)  # Give the scheduler the time to unregister the socket first
-        await self.loop._close_sock(self.sock)
+        await self.loop.close_sock(self.sock)
         self._closed = True
 
     async def connect(self, addr: tuple):
-        """Connects the socket to an endpoint"""
+        """
+        Connects the socket to an endpoint
+        """
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await self.loop._connect_sock(self.sock, addr)
+        await self.loop.connect_sock(self.sock, addr)
 
     async def __aenter__(self):
-        return self.sock.__enter__()
+        return self
 
     async def __aexit__(self, *_):
         await self.close()

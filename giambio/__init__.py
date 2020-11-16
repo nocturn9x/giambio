@@ -16,10 +16,13 @@ limitations under the License.
 
 __author__ = "Nocturn9x aka Isgiambyy"
 __version__ = (1, 0, 0)
-from ._run import run, clock, wrap_socket, create_pool
+
+
 from .exceptions import GiambioError, AlreadyJoinedError, CancelledError
-from ._traps import sleep
-from ._layers import Event
+from .traps import sleep, current_task
+from .objects import Event
+from .run import run, clock, wrap_socket, create_pool, get_event_loop, new_event_loop
+
 
 __all__ = [
     "GiambioError",
@@ -30,5 +33,8 @@ __all__ = [
     "run",
     "clock",
     "wrap_socket",
-    "create_pool"
+    "create_pool",
+    "get_event_loop",
+    "current_task",
+    "new_event_loop"
 ]

@@ -14,19 +14,49 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import socket
 import threading
-from ._core import AsyncScheduler
-from ._layers import Task
-from ._managers import TaskManager
+from .core import AsyncScheduler
+from .exceptions import GiambioError
+from .context import TaskManager
 from .socket import AsyncSocket
 from types import FunctionType, CoroutineType, GeneratorType
-import socket
 
 
 thread_local = threading.local()
 
 
-def run(func: FunctionType, *args) -> Task:
+def get_event_loop():
+    """
+    Returns the event loop associated to the current
+    thread
+    """
+
+    try:
+        return thread_local.loop
+    except AttributeError:
+        raise GiambioError("no event loop set") from None
+
+
+def new_event_loop():
+    """
+    Associates a new event loop to the current thread
+    and deactivates the old one. This should not be
+    called explicitly unless you know what you're doing
+    """
+
+    try:
+        loop = thread_local.loop
+    except AttributeError:
+        thread_local.loop = AsyncScheduler()
+    else:
+        if not loop.done():
+            raise GiambioError("cannot set event loop while running")
+        else:
+            thread_local.loop = AsyncScheduler()
+
+
+def run(func: FunctionType, *args):
     """
     Starts the event loop from a synchronous entry point
     """
@@ -34,11 +64,8 @@ def run(func: FunctionType, *args) -> Task:
     if isinstance(func, (CoroutineType, GeneratorType)):
         raise RuntimeError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
                            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
-    try:
-        return thread_local.loop.start(func, *args)
-    except AttributeError:
-        thread_local.loop = AsyncScheduler()
-    return thread_local.loop.start(func, *args)
+    new_event_loop()
+    thread_local.loop.start(func, *args)
 
 
 def clock():
