@@ -61,7 +61,6 @@ class TaskManager:
         for task in self.tasks:
             try:
                 await task.join()
-            except BaseException as task_error:
-                for dead in self.tasks:
-                    await dead.cancel()
-                raise task.exc
+            except BaseException:
+                for to_cancel in self.tasks:
+                    await to_cancel.cancel()

@@ -61,17 +61,15 @@ class Task:
         Joins the task
         """
 
-        res = await join(self)
-        if self.exc:
-            raise self.exc
-        return res
+        return await join(self)
 
     async def cancel(self):
         """
         Cancels the task
         """
-
-        await cancel(self)
+        
+        if not self.exc and not self.cancelled and not self.finished:
+            await cancel(self)
 
     def __del__(self):
         self.coroutine.close()
@@ -92,7 +90,7 @@ class Event:
         self.timeout = None
         self.waiting = 0
 
-    async def set(self):
+    async def activate(self):
         """
         Sets the event, waking up all tasks that called
         pause() on us

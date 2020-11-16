@@ -129,19 +129,19 @@ class AsyncScheduler:
                     # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
             except CancelledError:
-                self.current_task.status = "end"
+                self.current_task.status = "cancelled"
                 self.current_task.cancelled = True
                 self.current_task.cancel_pending = False
-                self.join(self.current_task, self.current_task.parent)
             except StopIteration as ret:
                 # Coroutine ends
                 self.current_task.status = "end"
                 self.current_task.result = ret.value
                 self.current_task.finished = True
+                self.join()
             except BaseException as err:
                 self.current_task.exc = err
                 self.current_task.status = "crashed"
-                self.join(self.current_task, self.current_task.parent)
+                self.join()
 
     def do_cancel(self):
         """
@@ -151,6 +151,7 @@ class AsyncScheduler:
         """
 
         self.current_task.throw(CancelledError)
+        self.current_task.coroutine.close()
 
     def get_running(self):
         """
@@ -218,40 +219,30 @@ class AsyncScheduler:
         currently running task, if any
         """
 
-        parent = self.current_task.parent
-        if parent:
+        if parent := self.current_task.parent:
             self.tasks.append(parent)
-        return parent
 
     def reschedule_joinee(self):
         """
-        Reschedules the joinee task of the
+        Reschedules the joinee(s) task of the
         currently running task, if any
         """
 
         self.tasks.extend(self.current_task.waiters)
 
-    def join(self, child: types.coroutine, parent):
+    def join(self):
         """
         Handler for the 'join' event, does some magic to tell the scheduler
-        to wait in the given parent until the current coroutine ends
+        to wait until the current coroutine ends
         """
 
+        child = self.current_task
         child.joined = True
-        if parent:
-            print("p")
-            child.waiters.append(parent)
-        if child.cancelled or child.exc:
-            print("f")
-            # Task was cancelled or has errored
-            if child.parent:
-                self.tasks.append(child.parent)
-            self.tasks.extend(child.waiters)
-        elif child.finished:
-            print("finish")
-#            if parent:
- #               self.tasks.append(parent)
-            self.tasks.extend(child.waiters)
+        if child.finished:
+            self.reschedule_joinee()
+            self.reschedule_parent()
+        elif child.exc:
+            raise child.exc
 
     def sleep(self, seconds: int or float):
         """
@@ -326,12 +317,16 @@ class AsyncScheduler:
         else:
             self.event_waiting[event].append(self.current_task)
 
-    def cancel(self, task):
+    def cancel(self):
         """
-        Handler for the 'cancel' event, sets the task to be cancelled later
+        Handler for the 'cancel' event, schedules the task to be cancelled later
         """
 
-        task.cancel_pending = True  # Cancellation is deferred
+        if self.current_task.status in ("I/O", "sleep"):
+            # We cancel right away
+            self.do_cancel()
+        else:
+            self.current_task.cancel_pending = True  # Cancellation is deferred
 
     def wrap_socket(self, sock):
         """
@@ -384,7 +379,6 @@ class AsyncScheduler:
 
         await want_write(sock)
         self.selector.unregister(sock)
-        sock.setblocking(False)
         return sock.close()
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):

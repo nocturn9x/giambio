@@ -27,8 +27,8 @@ async def countup(stop: int, step: int = 1):
 async def main():
     try:
         async with giambio.create_pool() as pool:
-            pool.spawn(countdown, 10)
-            pool.spawn(countup, 5, 2)
+            pool.spawn(countdown, 5)
+            pool.spawn(countup, 5, 1)
     except Exception as e:
         print(f"Got -> {type(e).__name__}: {e}")
     print("Task execution complete")

@@ -73,7 +73,7 @@ async def join(task):
     :type task: class: Task
     """
 
-    return await create_trap("join", task, await current_task())
+    return await create_trap("join")
 
 
 async def cancel(task):
@@ -89,7 +89,7 @@ async def cancel(task):
     code, so if you really wanna do that be sure to re-raise it when done!
     """
 
-    await create_trap("cancel", task)
+    await create_trap("cancel")
     assert task.cancelled, f"Coroutine ignored CancelledError"
 
 
