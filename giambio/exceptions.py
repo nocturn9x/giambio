@@ -1,4 +1,6 @@
 """
+Exceptions for giambio
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,36 +18,35 @@ limitations under the License.
 
 
 class GiambioError(Exception):
-    """Base class for gaimbio exceptions"""
+    """
+    Base class for giambio exceptions
+    """
 
-    pass
-
-
-class AlreadyJoinedError(GiambioError):
-    pass
+    ...
 
 
 class CancelledError(BaseException):
-    """Exception raised by the giambio._layers.Task.cancel() method"""
+    """
+    Exception raised by the giambio.objects.Task.cancel() method
+    to terminate a child task. This should NOT be catched, or
+    at least it should be re-raised and never ignored
+    """
 
-    def __repr__(self):
-        return "giambio.exceptions.CancelledError"
+    ...
 
 
 class ResourceBusy(GiambioError):
-    """Exception that is raised when a resource is accessed by more than
-    one task at a time"""
+    """
+    Exception that is raised when a resource is accessed by more than
+    one task at a time
+    """
 
-    pass
-
-
-class BrokenPipeError(GiambioError):
-    """Wrapper around the broken pipe socket.error"""
-
-    pass
+    ...
 
 
 class ResourceClosed(GiambioError):
-    """Raised when I/O is attempted on a closed fd"""
+    """
+    Raised when I/O is attempted on a closed resource
+    """
 
-    pass
+    ...

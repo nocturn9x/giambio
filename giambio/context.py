@@ -1,4 +1,6 @@
 """
+Higher-level context managers for async pools
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,6 +63,7 @@ class TaskManager:
         for task in self.tasks:
             try:
                 await task.join()
-            except BaseException:
+            except BaseException as e:
+                self.tasks.remove(task)
                 for to_cancel in self.tasks:
                     await to_cancel.cancel()

@@ -18,16 +18,14 @@ __author__ = "Nocturn9x aka Isgiambyy"
 __version__ = (1, 0, 0)
 
 
-from .exceptions import GiambioError, AlreadyJoinedError, CancelledError
+from . import exceptions
 from .traps import sleep, current_task
 from .objects import Event
 from .run import run, clock, wrap_socket, create_pool, get_event_loop, new_event_loop
 
 
 __all__ = [
-    "GiambioError",
-    "AlreadyJoinedError",
-    "CancelledError",
+    "exceptions",
     "sleep",
     "Event",
     "run",

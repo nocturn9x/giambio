@@ -1,4 +1,6 @@
 """
+Various object wrappers and abstraction layers
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,15 +63,17 @@ class Task:
         Joins the task
         """
 
-        return await join(self)
+        res = await join(self)
+        if self.exc:
+            raise self.exc
+        return res
 
     async def cancel(self):
         """
         Cancels the task
         """
-        
-        if not self.exc and not self.cancelled and not self.finished:
-            await cancel(self)
+
+        await cancel(self)
 
     def __del__(self):
         self.coroutine.close()
@@ -86,11 +90,10 @@ class Event:
         """
 
         self.set = False
+        self.waiters = []
         self.event_caught = False
-        self.timeout = None
-        self.waiting = 0
 
-    async def activate(self):
+    async def trigger(self):
         """
         Sets the event, waking up all tasks that called
         pause() on us
@@ -100,12 +103,11 @@ class Event:
             raise GiambioError("The event has already been set")
         await event_set(self)
 
-    async def pause(self):
+    async def wait(self):
         """
         Waits until the event is set
         """
 
-        self.waiting += 1
         await event_wait(self)
 
 

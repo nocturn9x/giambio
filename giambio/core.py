@@ -1,4 +1,6 @@
 """
+The main runtime environment for giambio
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,18 +24,15 @@ from timeit import default_timer
 from .objects import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from .traps import want_read, want_write
-from collections import defaultdict, deque
+from collections import deque
 from .socket import AsyncSocket, WantWrite, WantRead
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from .exceptions import (
-                         AlreadyJoinedError,
                          CancelledError,
                          ResourceBusy,
-                         GiambioError
                          )
 
 
-# The main runtime environment for giambio
 
 class AsyncScheduler:
     """
@@ -62,8 +61,6 @@ class AsyncScheduler:
         self.paused = TimeQueue(self.clock)
         # All active Event objects
         self.events = set()
-        # Coroutines waiting on event objects
-        self.event_waiting = defaultdict(list)
         # Data to send back to a trap
         self.to_send = None
         # Have we ever ran?
@@ -74,7 +71,10 @@ class AsyncScheduler:
         Returns True if there is work to do
         """
 
-        if self.selector.get_map() or any([self.paused, self.tasks, self.event_waiting]):
+        if self.selector.get_map() or any([self.paused,
+                                           self.tasks,
+                                           self.events
+                                           ]):
             return False
         return True
 
@@ -83,6 +83,7 @@ class AsyncScheduler:
         Shuts down the event loop
         """
 
+        # TODO: See if other teardown is required (massive join()?)
         self.selector.close()
 
     def run(self):
@@ -106,9 +107,9 @@ class AsyncScheduler:
                     if self.selector.get_map():
                         # The next step is checking for I/O
                         self.check_io()
-                    if self.event_waiting:
+                    if self.events:
                         # Try to awake event-waiting tasks
-                        self.trigger_events()
+                        self.check_events()
                 # While there are tasks to run
                 while self.tasks:
                     # Sets the currently running task
@@ -132,6 +133,7 @@ class AsyncScheduler:
                 self.current_task.status = "cancelled"
                 self.current_task.cancelled = True
                 self.current_task.cancel_pending = False
+                self.join()   # TODO: Investigate if a call to join() is needed
             except StopIteration as ret:
                 # Coroutine ends
                 self.current_task.status = "end"
@@ -150,8 +152,8 @@ class AsyncScheduler:
         as tasks are independent
         """
 
+        # TODO: Do we need anything else?
         self.current_task.throw(CancelledError)
-        self.current_task.coroutine.close()
 
     def get_running(self):
         """
@@ -161,16 +163,17 @@ class AsyncScheduler:
         self.tasks.append(self.current_task)
         self.to_send = self.current_task
 
-    def trigger_events(self):
+    def check_events(self):
         """
         Checks for ready or expired events and triggers them
         """
 
-        for event, tasks in self.event_waiting.copy().items():
+        for event in self.events.copy():
             if event.set:
                 event.event_caught = True
-                self.tasks.extend(tasks + [event.notifier])
-                self.event_waiting.pop(event)
+                event.waiters
+                self.tasks.extend(event.waiters)
+                self.events.remove(event)
 
     def awake_sleeping(self):
         """
@@ -213,15 +216,6 @@ class AsyncScheduler:
         if entry.exc:
             raise entry.exc from None
 
-    def reschedule_parent(self):
-        """
-        Reschedules the parent task of the
-        currently running task, if any
-        """
-
-        if parent := self.current_task.parent:
-            self.tasks.append(parent)
-
     def reschedule_joinee(self):
         """
         Reschedules the joinee(s) task of the
@@ -238,11 +232,12 @@ class AsyncScheduler:
 
         child = self.current_task
         child.joined = True
+        if child.parent:
+            child.waiters.append(child.parent)
         if child.finished:
             self.reschedule_joinee()
-            self.reschedule_parent()
         elif child.exc:
-            raise child.exc
+            ...   # TODO: Handle exceptions
 
     def sleep(self, seconds: int or float):
         """
@@ -258,7 +253,8 @@ class AsyncScheduler:
     # TODO: More generic I/O rather than just sockets
     def want_read(self, sock: socket.socket):
         """
-        Handler for the 'want_read' event, registers the socket inside the selector to perform I/0 multiplexing
+        Handler for the 'want_read' event, registers the socket inside the
+        selector to perform I/0 multiplexing
         """
 
         self.current_task.status = "I/O"
@@ -277,7 +273,8 @@ class AsyncScheduler:
 
     def want_write(self, sock: socket.socket):
         """
-        Handler for the 'want_write' event, registers the socket inside the selector to perform I/0 multiplexing
+        Handler for the 'want_write' event, registers the socket inside the
+        selector to perform I/0 multiplexing
         """
 
         self.current_task.status = "I/O"
@@ -286,7 +283,7 @@ class AsyncScheduler:
                 # Socket is already scheduled!
                 return
             else:
-                # modify() causes issues
+                # TODO: Inspect why modify() causes issues
                 self.selector.unregister(sock)
         self.current_task.last_io = "WRITE", sock
         try:
@@ -299,27 +296,23 @@ class AsyncScheduler:
         Sets an event
         """
 
-        event.notifier = self.current_task
-        event.set = True
         self.events.add(event)
+        event.waiters.append(self.current_task)
+        event.set = True
+        self.reschedule_joinee()
 
     def event_wait(self, event):
         """
-        Waits for an event
+        Pauses the current task on an event
         """
 
-        if event in self.events:
-            event.waiting -= 1
-            if event.waiting <= 0:
-                return self.events.remove(event)
-            else:
-                return
-        else:
-            self.event_waiting[event].append(self.current_task)
+        event.waiters.append(self.current_task)
+
 
     def cancel(self):
         """
         Handler for the 'cancel' event, schedules the task to be cancelled later
+        or does so straight away if it is safe to do so
         """
 
         if self.current_task.status in ("I/O", "sleep"):
@@ -337,8 +330,8 @@ class AsyncScheduler:
 
     async def read_sock(self, sock: socket.socket, buffer: int):
         """
-        Reads from a socket asynchronously, waiting until the resource is available and returning up to buffer bytes
-        from the socket
+        Reads from a socket asynchronously, waiting until the resource is
+        available and returning up to buffer bytes from the socket
         """
 
         try:
@@ -349,8 +342,8 @@ class AsyncScheduler:
 
     async def accept_sock(self, sock: socket.socket):
         """
-        Accepts a socket connection asynchronously, waiting until the resource is available and returning the
-        result of the accept() call
+        Accepts a socket connection asynchronously, waiting until the resource
+        is available and returning the result of the accept() call
         """
 
         try:

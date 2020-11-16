@@ -1,4 +1,10 @@
 """
+Implementation for all giambio traps, which are hooks
+into the event loop and allow it to switch tasks.
+These coroutines are the one and only way to interact
+with the event loop from the user's perspective, and
+the entire library is based on them
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +19,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
-# Implementation for all giambio traps, which are hooks
-# into the event loop and allow it to switch tasks
-# These coroutines are the one and only way to interact
-# with the event loop from the user's perspective, and
-# the entire library is based on these traps
 
 
 import types
@@ -95,7 +95,7 @@ async def cancel(task):
 
 async def want_read(stream):
     """
-    Notifies the event loop that a task that wants to read from the given
+    Notifies the event loop that a task wants to read from the given
     resource
 
     :param stream: The resource that needs to be read
@@ -106,7 +106,7 @@ async def want_read(stream):
 
 async def want_write(stream):
     """
-    Notifies the event loop that a task that wants to read from the given
+    Notifies the event loop that a task wants to write on the given
     resource
 
     :param stream: The resource that needs to be written
@@ -128,7 +128,7 @@ async def event_set(event):
 async def event_wait(event):
     """
     Notifies the event loop that the current task has to wait
-    for given event to trigger
+    for the given event to trigger
     """
 
     await create_trap("event_wait", event)

@@ -1,4 +1,6 @@
 """
+Helper methods and public API
+
 Copyright (C) 2020 nocturn9x
 
 Licensed under the Apache License, Version 2.0 (the "License");

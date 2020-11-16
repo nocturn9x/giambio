@@ -1,5 +1,4 @@
 """
-
 Basic abstraction layer for giambio asynchronous sockets
 
 Copyright (C) 2020 nocturn9x
@@ -22,6 +21,7 @@ import socket
 from .exceptions import ResourceClosed
 from .traps import sleep
 
+
 # Stolen from curio
 try:
     from ssl import SSLWantReadError, SSLWantWriteError
@@ -34,18 +34,18 @@ except ImportError:
 
 class AsyncSocket(object):
     """
-    Abstraction layer for asynchronous sockets
+    Abstraction layer for asynchronous TCP sockets
     """
 
     def __init__(self, sock: socket.socket, loop):
         self.sock = sock
-        self.sock.setblocking(False)
         self.loop = loop
         self._closed = False
+        self.sock.setblocking(False)
 
     async def receive(self, max_size: int):
         """
-        Receives up to max_size from a socket asynchronously
+        Receives up to max_size bytes from a socket asynchronously
         """
 
         if self._closed:
