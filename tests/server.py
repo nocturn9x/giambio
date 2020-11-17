@@ -17,10 +17,11 @@ async def serve(address: tuple):
     asock = giambio.wrap_socket(sock)   # We make the socket an async socket
     logging.info(f"Serving asynchronously at {address[0]}:{address[1]}")
     async with giambio.create_pool() as pool:
-        conn, addr = await asock.accept()
-        logging.info(f"{addr[0]}:{addr[1]} connected")
-        pool.spawn(handler, conn, addr)
-
+        while True:
+            conn, addr = await asock.accept()
+            logging.info(f"{addr[0]}:{addr[1]} connected")
+            pool.spawn(handler, conn, addr)
+    print("oof done")
 
 async def handler(sock: AsyncSocket, addr: tuple):
     addr = f"{addr[0]}:{addr[1]}"

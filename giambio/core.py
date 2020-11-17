@@ -228,7 +228,7 @@ class AsyncScheduler:
 
     def reschedule_joinee(self):
         """
-        Reschedules the joinee(s) task of the
+        Reschedules the joinee(s) of the
         currently running task, if any
         """
 

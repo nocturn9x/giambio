@@ -63,7 +63,8 @@ class TaskManager:
         for task in self.tasks:
             try:
                 await task.join()
-            except BaseException as e:
+            except BaseException:
                 self.tasks.remove(task)
                 for to_cancel in self.tasks:
                     await to_cancel.cancel()
+        print("oof")
