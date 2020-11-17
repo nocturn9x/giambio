@@ -48,7 +48,6 @@ if __name__ == "__main__":
     try:
         giambio.run(serve, ("localhost", port))
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
-        raise
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")
         else:

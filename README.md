@@ -28,7 +28,7 @@ actually might be a good choice when it comes to I/O for reasons that span far b
 If you choose to use threads, there are a couple things you can do, involving what is known as _thread synchronization 
 primitives_ and _thread pools_, but once again that is beyond the purposes of this quickstart guide.
 A library like giambio comes into play when you need to perform lots of [blocking operations](https://en.wikipedia.org/wiki/Blocking_(computing)), 
-and network servers happens to be heavily based on I/O: a blocking operation. 
+and network servers happen to be heavily based on I/O: a blocking operation. 
 Starting to see where we're heading?
 
 
@@ -348,11 +348,12 @@ way before Python 3.5 added that nice new syntax.
 So, since only async functions can suspend themselves, the only places where giambio will switch
 tasks is where there is a call to `await something()`. If there is no `await`, then you can be sure
 that giambio will not switch tasks (because it can't): this makes the asynchronous model much easier
-to reason about, because you can immediately statically infer if function will ever switch, and where
-will it do so, unlike threads which can (and will) switch whenever they feel like it.
+to reason about, because you can know if a function will ever switch, and where will it do so, just 
+by looking at its source code. That is very different from what threads do: they can (and will) switch 
+whenever they feel like it.
 
-Remember when we talked about checkpoints? That's what they are: async functions that allow giambio
-to switch tasks. The problem with checkpoints is that if you don't have enough of them in your code,
+Remember when we talked about checkpoints? That's what they are: calls to async functions that allow 
+giambio to switch tasks. The problem with checkpoints is that if you don't have enough of them in your code,
 then giambio will switch less frequently, hurting concurrency. It turns out that a quick and easy fix
 for that is calling `await giambio.sleep(0)`; This will implicitly let giambio kick in and do its job,
 and it will reschedule the caller almost immediately, because the sleep time is 0.
@@ -368,6 +369,8 @@ primitives (such as `giambio.sleep`) talk a language that only giambio's event l
 Other libraries have other private "languages", so mixing them is not possible: doing so will cause 
 giambio to get very confused and most likely just explode spectacularly badly
 
+
+TODO: I/O
 
 ## Contributing
 
