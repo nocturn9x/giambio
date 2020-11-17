@@ -25,6 +25,14 @@ class GiambioError(Exception):
     ...
 
 
+class InternalError(GiambioError):
+    """
+    Internal exception
+    """
+
+    ...
+
+
 class CancelledError(BaseException):
     """
     Exception raised by the giambio.objects.Task.cancel() method

@@ -27,7 +27,7 @@ from .traps import want_read, want_write
 from collections import deque
 from .socket import AsyncSocket, WantWrite, WantRead
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
-from .exceptions import (
+from .exceptions import (InternalError,
                          CancelledError,
                          ResourceBusy,
                          )
@@ -129,6 +129,9 @@ class AsyncScheduler:
                         self.to_send = None
                     # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
+            except AttributeError:  # If this happens, that's quite bad!
+                raise InternalError("Uh oh! Something very bad just happened, did"
+            " you try to mix primitives from other async libraries?") from None
             except CancelledError:
                 self.current_task.status = "cancelled"
                 self.current_task.cancelled = True
@@ -193,12 +196,19 @@ class AsyncScheduler:
         Checks and schedules task to perform I/O
         """
 
-        # If there are no tasks ready wait indefinitely
-        timeout = 0.0 if self.tasks else None
+        if self.tasks or self.events:  # If there are tasks or events, never wait
+            timeout = 0.0
+        elif self.paused:   # If there are asleep tasks, wait until the closest
+            # deadline
+            timeout = max(0.0, self.paused[0][0] - self.clock())
+        else:
+            timeout = None    # If we _only_ have I/O to do, then wait indefinitely
         for key in dict(self.selector.get_map()).values():
+            # We make sure we don't reschedule finished tasks
             if key.data.finished:
+                key.data.last_io = ()
                 self.selector.unregister(key.fileobj)
-        if self.selector.get_map():
+        if self.selector.get_map():  # If there is indeed tasks waiting on I/O
             io_ready = self.selector.select(timeout)
             # Get sockets that are ready and schedule their tasks
             for key, _ in io_ready:
