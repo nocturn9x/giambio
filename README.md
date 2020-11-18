@@ -1,6 +1,6 @@
 # giambio - Asynchronous Python made easy (and friendly)
 
-giambio is an event-driven concurrency library meant* to perform efficient and high-performant I/O multiplexing.
+Giambio is an event-driven concurrency library meant* to perform efficient and high-performant I/O multiplexing.
 This library implements what is known as a _stackless mode of execution_, or
 "green threads", though the latter term is misleading as **no multithreading is involved** (at least not by default).
 
@@ -253,6 +253,7 @@ Ok, so, let's try running this snippet and see what we get:
 ```
 [child] Child spawned!! Sleeping for 2 seconds
 [child 1] Child spawned!! Sleeping for 2 seconds
+[... 2 seconds pass ...]
 [child] Had a nice nap!
 [child 1] Had a nice nap!
 [main] Children execution complete in 2.01 seconds
@@ -512,9 +513,9 @@ of its children task and ask `giambio.run` to wake him up after a given amount o
 
 __Note__: You may wonder whether you can mix async libraries: for instance, can we call `trio.sleep` in a 
 giambio application? The answer is no, we can't, and this section explains why. When you call
-`await giambio.sleep` that function talks a language that only `giambio.run` can understand. 
-Other libraries have other private "languages", so mixing them is not possible: doing so will cause 
-giambio to get very confused and most likely just explode spectacularly badly
+`await giambio.sleep`, it asks `giambio.run` to pause the current task, and to do to it talks a language
+that only `giambio.run` can understand. Other libraries have other private "languages", so mixing them is
+not possible: doing so will cause  giambio to get very confused and most likely just explode spectacularly badly
 
 
 ## Contributing
