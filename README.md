@@ -21,7 +21,7 @@ that most of the following text is ~~stolen~~ inspired from its documentation)
 
 # What the hell is async anyway?
 
-Libraries like giambio shine the most when it comes to performing asyncronous I/O (reading a socket, writing to a file, that sort of thing).
+Libraries like giambio shine the most when it comes to performing asynchronous I/O (reading from a socket, writing to a file, that sort of thing).
 The most common example of this is a network server that needs to handle multiple connections at the same time.
 One possible approach to achieve concurrency is to use threads, and despite their bad reputation in Python, they 
 actually might be a good choice when it comes to I/O for reasons that span far beyond the scope of this tutorial.
@@ -515,7 +515,7 @@ of its children task and ask `giambio.run` to wake him up after a given amount o
 
 __Note__: You may wonder whether you can mix async libraries: for instance, can we call `trio.sleep` in a 
 giambio application? The answer is no, we can't, and this section explains why. When you call
-`await giambio.sleep`, it asks `giambio.run` to pause the current task, and to do to it talks a language
+`await giambio.sleep`, it asks `giambio.run` to pause the current task, and to do so it talks a language
 that only `giambio.run` can understand. Other libraries have other private "languages", so mixing them is
 not possible: doing so will cause  giambio to get very confused and most likely just explode spectacularly badly
 

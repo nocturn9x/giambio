@@ -31,7 +31,7 @@ class BaseDebugger(ABC):
       This method is called when the event
       loop starts executing
       """
-      
+
       raise NotImplementedError
 
    @abstractmethod
@@ -40,7 +40,7 @@ class BaseDebugger(ABC):
       This method is called when the event
       loop exits entirely (all tasks completed)
       """
-      
+
       raise NotImplementedError
 
    @abstractmethod
@@ -51,12 +51,12 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       :param delay: The delay, in seconds, after which
       the task will start executing
       :type delay: int
       """
-      
+
       raise NotImplementedError
 
    @abstractmethod
@@ -67,11 +67,11 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       """
 
       raise NotImplementedError
-   
+
    @abstractmethod
    def on_task_exit(self, task: Task):
       """
@@ -79,20 +79,20 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       """
 
       raise NotImplementedError
-   
+
    @abstractmethod
    def before_task_step(self, task: Task):
       """
       This method is called right before
-      calling its run() method
+      calling a task's run() method
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       """
 
       raise NotImplementedError
@@ -101,11 +101,11 @@ class BaseDebugger(ABC):
    def after_task_step(self, task: Task):
       """
       This method is called right after
-      calling its run() method
+      calling a task's run() method
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       """
 
       raise NotImplementedError
@@ -118,23 +118,23 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       :param seconds: The amount of seconds the
       task wants to sleep
       :type seconds: int
       """
 
       raise NotImplementedError
-   
+
    @abstractmethod
    def after_sleep(self, task: Task, seconds: Union[int, float]):
       """
-      This method is called before after a tasks
+      This method is called after a tasks
       awakes from sleeping
-      
+
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task
+      :type task: :class: giambio.objects.Task
       :param seconds: The amount of seconds the
       task actually slept
       :type seconds: int
@@ -178,7 +178,7 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task      
+      :type task: :class: giambio.objects.Task
       """
 
       raise NotImplementedError
@@ -191,7 +191,8 @@ class BaseDebugger(ABC):
 
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
-      :type task: class: giambio.objects.Task      
+      :type task: :class: giambio.objects.Task
       """
-      
+
       raise NotImplementedError
+
