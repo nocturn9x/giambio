@@ -171,7 +171,9 @@ The reason for this is that while giambio tries to separate the async and sync w
 - It creates this weird coroutine object
 - Passes that object to `await`, which runs the function
 
-So basically that's why you always need to put `await` in front of an async function when calling it. 
+This is due to the fact that people started writing asynchronous Python code _before_ the `async`/`await` syntax was added,
+so many libraries (like asyncio), had to figure out some clever hacks to make it work without native support from the language
+itself, taking advantage of generator functions (we'll talk about those later on), and coroutines are heavily based on generators.
 
 
 ## Something actually useful
