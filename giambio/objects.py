@@ -43,6 +43,7 @@ class Task:
     joined: bool= False
     cancel_pending: bool = False
     waiters: list = field(default_factory=list)
+    sleep_start: int = None
 
     def run(self, what=None):
         """

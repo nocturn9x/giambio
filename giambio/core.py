@@ -24,6 +24,7 @@ from timeit import default_timer
 from .objects import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from .traps import want_read, want_write
+from .util.debug import BaseDebugger
 from collections import deque
 from .socket import AsyncSocket, WantWrite, WantRead
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
@@ -44,11 +45,16 @@ class AsyncScheduler:
     A few examples are tasks cancellation and exception propagation.
     """
 
-    def __init__(self):
+    def __init__(self, debugger: BaseDebugger = None):
         """
         Object constructor
         """
 
+        # The debugger object. If it is none we create a dummy object that immediately returns an empty
+        # lambda every time you access any of its attributes to avoid lots of if self.debugger clauses
+        if debugger:
+            assert issubclass(type(debugger), BaseDebugger), "The debugger must be a subclass of giambio.util.BaseDebugger"
+        self.debugger = debugger or type("DumbDebugger", (object, ), {"__getattr__": lambda *args: lambda *args: None})()
         # Tasks that are ready to run
         self.tasks = deque()
         # Selector object to perform I/O multiplexing
@@ -71,10 +77,7 @@ class AsyncScheduler:
         Returns True if there is work to do
         """
 
-        if self.selector.get_map() or any([self.paused,
-                                           self.tasks,
-                                           self.events
-                                           ]):
+        if any([self.paused, self.tasks, self.events, self.selector.get_map()]):
             return False
         return True
 
@@ -97,23 +100,25 @@ class AsyncScheduler:
         while True:
             try:
                 if self.done():
+                    # If we're done, which means there is no 
+                    # sleeping tasks, no events to deliver,
+                    # no I/O to do and no running tasks, we
+                    # simply tear us down and return to self.start
                     self.shutdown()
                     break
                 elif not self.tasks:
-                    if self.paused:
-                        # If there are no actively running tasks
-                        # we try to schedule the asleep ones
-                        self.awake_sleeping()
-                    if self.selector.get_map():
-                        # The next step is checking for I/O
-                        self.check_io()
-                    if self.events:
-                        # Try to awake event-waiting tasks
-                        self.check_events()
-                # While there are tasks to run
+                    # If there are no actively running tasks
+                    # we try to schedule the asleep ones
+                    self.awake_sleeping()
+                    # The next step is checking for I/O
+                    self.check_io()
+                    # Try to awake event-waiting tasks
+                    self.check_events()
+                # Otherwise, while there are tasks ready to run, well, run them!
                 while self.tasks:
                     # Sets the currently running task
                     self.current_task = self.tasks.popleft()
+                    self.debugger.before_task_step(self.current_task)
                     if self.current_task.cancel_pending:
                         self.do_cancel()
                     if self.to_send and self.current_task.status != "init":
@@ -124,6 +129,7 @@ class AsyncScheduler:
                     method, *args = self.current_task.run(data)
                     self.current_task.status = "run"
                     self.current_task.steps += 1
+                    self.debugger.after_task_step(self.current_task)
                     # Data has been sent, reset it to None
                     if self.to_send and self.current_task != "init":
                         self.to_send = None
@@ -136,12 +142,14 @@ class AsyncScheduler:
                 self.current_task.status = "cancelled"
                 self.current_task.cancelled = True
                 self.current_task.cancel_pending = False
+                self.debugger.after_cancel(self.current_task)
                 self.join()   # TODO: Investigate if a call to join() is needed
             except StopIteration as ret:
                 # Coroutine ends
                 self.current_task.status = "end"
                 self.current_task.result = ret.value
                 self.current_task.finished = True
+                self.debugger.on_task_exit(self.current_task)
                 self.join()
             except BaseException as err:
                 self.current_task.exc = err
@@ -156,7 +164,9 @@ class AsyncScheduler:
         """
 
         # TODO: Do we need anything else?
+        self.debugger.before_cancel(self.current_task)
         self.current_task.throw(CancelledError)
+
 
     def get_running(self):
         """
@@ -187,7 +197,11 @@ class AsyncScheduler:
         # Sleep until the closest deadline in order not to waste CPU cycles
         while self.paused[0][0] < self.clock():
             # Reschedules tasks when their deadline has elapsed
-            self.tasks.append(self.paused.get())
+            task = self.paused.get()
+            slept = self.clock() - task.sleep_start
+            task.sleep_start = None
+            self.tasks.append(task)
+            self.debugger.after_sleep(task, slept)
             if not self.paused:
                 break
 
@@ -196,13 +210,16 @@ class AsyncScheduler:
         Checks and schedules task to perform I/O
         """
 
-        if self.tasks or self.events:  # If there are tasks or events, never wait
+        if self.tasks or self.events and not self.selector.get_map():
+            # If there are either tasks or events and no I/O, never wait
             timeout = 0.0
-        elif self.paused:   # If there are asleep tasks, wait until the closest
-            # deadline
+        elif self.paused:
+            # If there are asleep tasks, wait until the closest deadline
             timeout = max(0.0, self.paused[0][0] - self.clock())
-        else:
-            timeout = None    # If we _only_ have I/O to do, then wait indefinitely
+        elif self.selector.get_map():
+            # If there is *only* I/O, we wait a fixed amount of time
+            timeout = 1  # TODO: Is this ok?
+        self.debugger.before_io(timeout)
         for key in dict(self.selector.get_map()).values():
             # We make sure we don't reschedule finished tasks
             if key.data.finished:
@@ -213,6 +230,7 @@ class AsyncScheduler:
             # Get sockets that are ready and schedule their tasks
             for key, _ in io_ready:
                 self.tasks.append(key.data)  # Resource ready? Schedule its task
+        self.debugger.after_io(timeout)
 
     def start(self, func: types.FunctionType, *args):
         """
@@ -221,8 +239,10 @@ class AsyncScheduler:
 
         entry = Task(func(*args), func.__name__ or str(func))
         self.tasks.append(entry)
+        self.debugger.on_start()
         self.run()
         self.has_ran = True
+        self.debugger.on_exit()
         if entry.exc:
             raise entry.exc from None
 
@@ -254,8 +274,10 @@ class AsyncScheduler:
         Puts the caller to sleep for a given amount of seconds
         """
 
+        self.debugger.before_sleep(self.current_task, seconds)
         if seconds:
             self.current_task.status = "sleep"
+            self.current_task.sleep_start = self.clock()
             self.paused.put(self.current_task, seconds)
         else:
             self.tasks.append(self.current_task)

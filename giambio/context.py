@@ -44,6 +44,7 @@ class TaskManager:
         task.parent = self.loop.current_task
         self.loop.tasks.append(task)
         self.tasks.append(task)
+        self.loop.debugger.on_task_spawn(task)
 
     def spawn_after(self, func: types.FunctionType, n: int, *args):
         """
@@ -53,8 +54,10 @@ class TaskManager:
         assert n >= 0, "The time delay can't be negative"
         task = Task(func(*args), func.__name__ or str(func))
         task.parent = self.loop.current_task
+        task.sleep_start = self.loop.clock()
         self.loop.paused.put(task, n)
         self.tasks.append(task)
+        self.loop.debugger.on_task_schedule(task, n)
 
     async def __aenter__(self):
         return self
@@ -67,4 +70,3 @@ class TaskManager:
                 self.tasks.remove(task)
                 for to_cancel in self.tasks:
                     await to_cancel.cancel()
-        print("oof")

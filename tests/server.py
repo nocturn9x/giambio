@@ -21,7 +21,7 @@ async def serve(address: tuple):
             conn, addr = await asock.accept()
             logging.info(f"{addr[0]}:{addr[1]} connected")
             pool.spawn(handler, conn, addr)
-    print("oof done")
+
 
 async def handler(sock: AsyncSocket, addr: tuple):
     addr = f"{addr[0]}:{addr[1]}"

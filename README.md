@@ -190,44 +190,34 @@ To demonstrate this, have a look a this example
 ```python
 import giambio
 
-async def countdown(n: int):
-    print(f"Counting down from {n}!")
-    while n > 0:
-        print(f"Down {n}")
-        n -= 1
-        await giambio.sleep(1)
-    print("Countdown over")
-    return 0
+async def child():
+    print("[child] Child spawned! Sleeping for 2 seconds")
+    await giambio.sleep(2)
+    print("[child] Had a nice nap!")
 
-async def countup(stop: int):
-    print(f"Counting up to {stop}!")
-    x = 0
-    while x < stop:
-        print(f"Up {x}")
-        x += 1
-        await giambio.sleep(2)
-    print("Countup over")
-    return 1
+async def child1():
+    print("[child 1] Child spawned! Sleeping for 2 seconds")
+    await giambio.sleep(2)
+    print("[child 1] Had a nice nap!")
+
 
 async def main():
     start = giambio.clock()
     async with giambio.create_pool() as pool:
-        pool.spawn(countdown, 10)
-        pool.spawn(countup, 5)
-        print("Children spawned, awaiting completion")
-    print(f"Task execution complete in {giambio.clock() - start:2f} seconds")
+        pool.spawn(child)
+        pool.spawn(child1)
+        print("[main] Children spawned, awaiting completion")
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
+
 
 if __name__ == "__main__":
     giambio.run(main)
-
 ```
 
 There is a lot going on here, and we'll explain every bit of it step by step:
 
-- First, we imported giambio and defined two async functions: `countup` and `countdown`
-- These two functions do exactly what their name suggests, but for the purposes of
-this tutorial, `countup` will be running twice as slow as `countdown` (see the call
-to `await giambio.sleep(2)`?)
+- First, we imported giambio and defined two async functions: `child` and `child1`
+- These two functions will just print something and then sleep for 2 seconds
 - Here comes the real fun: `async with`? What's going on there?
 As it turns out, Python 3.5 didn't just add async functions, but also quite a bit
 of related new syntax. One of the things that was added is asynchronous context managers.
@@ -261,34 +251,18 @@ exceptions in giambio always behave as expected
 Ok, so, let's try running this snippet and see what we get:
 
 ```
-Children spawned, awaiting completion
-Counting down from 10!
-Down 10
-Counting up to 5!
-Up 0
-Down 9
-Up 1
-Down 8
-Down 7
-Up 2
-Down 6
-Down 5
-Up 3
-Down 4
-Down 3
-Up 4
-Down 2
-Down 1
-Countup over
-Countdown over
-Task execution complete in 10.07 seconds
+[child] Child spawned!! Sleeping for 2 seconds
+[child 1] Child spawned!! Sleeping for 2 seconds
+[child] Had a nice nap!
+[child 1] Had a nice nap!
+[main] Children execution complete in 2.01 seconds
 ```
 
 (Your output might have some lines swapped compared to this)
 
-You see how `countup` and `countdown` both start and finish
-together? Moreover, even though each function slept for about 10
-seconds (therefore 20 seconds total), the program just took 10
+You see how `child` and `child1` both start and finish
+together? Moreover, even though each function slept for about 2
+seconds (therefore 4 seconds total), the program just took 2
 seconds to complete, so our children are really running at the same time.
 
 If you've ever done thread programming, this will feel like home, and that's good: 
@@ -358,19 +332,190 @@ then giambio will switch less frequently, hurting concurrency. It turns out that
 for that is calling `await giambio.sleep(0)`; This will implicitly let giambio kick in and do its job,
 and it will reschedule the caller almost immediately, because the sleep time is 0.
 
-### Mix and match? No thanks
 
-You may wonder whether you can mix async libraries: for instance, can we call `trio.sleep` in a 
-giambio application? The answer is no, we can't, and there's a reason for that. Giambio wraps all
-your asynchronous code in its event loop, which is what actually runs the tasks. When you call
-`await giambio.something()`, what you're doing is sending "commands" to the event loop asking it
-to perform a certain thing in a given task, and to communicate your intent to the loop, the
-primitives (such as `giambio.sleep`) talk a language that only giambio's event loop can understand. 
+### A closer look
+
+In the above section we explained the theory behind async functions, but now we'll inspect the magic behind
+`giambio.run()` and its event loop to demistify _how_ giambio makes this whole async thing happen. Luckily for us,
+giambio has some useful tooling that lets us sneak peak inside the machinery of the library to better help us
+understand what's going on, located at `giambio.debug.BaseDebugger`. That's an abstract class that we can customize
+for our purposes and that communicates with the event loop about everything it's going, so let's code it:
+
+```python
+class Debugger(giambio.debug.BaseDebugger):
+    """
+    A simple debugger for this test
+    """
+
+    def on_start(self):
+        print("## Started running")
+
+    def on_exit(self):
+        print("## Finished running")
+
+    def on_task_schedule(self, task, delay: int):
+        print(f">> A task named '{task.name}' was scheduled to run in {delay:.2f} seconds")
+
+    def on_task_spawn(self, task):
+        print(f">> A task named '{task.name}' was spawned")
+   
+    def on_task_exit(self, task):
+        print(f"<< Task '{task.name}' exited")
+   
+    def before_task_step(self, task):
+        print(f"-> About to run a step for '{task.name}'")
+
+    def after_task_step(self, task):
+        print(f"<- Ran a step for '{task.name}'")
+
+    def before_sleep(self, task, seconds):
+        print(f"# About to put '{task.name}' to sleep for {seconds:.2f} seconds")
+   
+    def after_sleep(self, task, seconds):
+        print(f"# Task '{task.name}' slept for {seconds:.2f} seconds")
+
+    def before_io(self, timeout):
+        print(f"!! About to check for I/O for up to {timeout:.2f} seconds")
+
+    def after_io(self, timeout):
+        print(f"!! Done I/O check (timeout {timeout:.2f} seconds)")
+
+    def before_cancel(self, task):
+        print(f"// About to cancel '{task.name}'")
+
+    def after_cancel(self, task):
+        print(f"// Cancelled '{task.name}'")
+```
+
+To use our debugger class, we need to pass it to `giambio.run()` using
+the `debugger` keyword argument, like so:
+
+```python
+...
+if __name__ == "__main__":
+    giambio.run(main, debugger=Debugger())
+```
+
+__Note__: Note that we passed an _instance_ (see the parentheses?) **not** a class
+
+Running that modified code will produce a lot of output, and it should look something like this:
+
+```
+## Started running
+-> About to run a step for 'main'
+>> A task named 'child' was spawned
+>> A task named 'child1' was spawned
+[main] Children spawned, awaiting completion
+<- Ran a step for 'main'
+-> About to run a step for 'child'
+[child] Child spawned!! Sleeping for 2 seconds
+<- Ran a step for 'child'
+# About to put 'child' to sleep for 2.00 seconds
+-> About to run a step for 'child1'
+[child 1] Child spawned!! Sleeping for 2 seconds
+<- Ran a step for 'child1'
+# About to put 'child1' to sleep for 2.00 seconds
+[... 2 seconds pass ...]
+# Task 'child' slept for 2.01 seconds
+# Task 'child1' slept for 2.01 seconds
+!! About to check for I/O for up to 0.00 seconds
+!! Done I/O check (timeout 0.00 seconds)
+-> About to run a step for 'child'
+[child] Had a nice nap!
+<< Task 'child' exited
+-> About to run a step for 'child1'
+[child 1] Had a nice nap!
+<< Task 'child1' exited
+-> About to run a step for 'main'
+<- Ran a step for 'main'
+-> About to run a step for 'main'
+[main] Children execution complete in 2.01 seconds
+<< Task 'main' exited
+## Finished running
+```
+
+As expected, this prints _a lot_ of stuff, but let's start going trough it:
+- First, we start the event loop: That's the call to `giambio.run()`
+   ```
+   ## Started running
+   ```
+- After that, we start running the `main` function
+  ```
+  -> About to run a step for 'main'
+  ```
+- When we run `main`, that enters the `async with` block and spawns our children,
+  as well as execute our call to `print`
+   ```
+   >> A task named 'child' was spawned
+   >> A task named 'child1' was spawned
+   [main] Children spawned, awaiting completion
+   ```
+- After that, we hit the end of the block, so we pause and wait for our children
+  to complete: That's when we start switching, and `child` can now run
+  ```
+  <- Ran a step for 'main'
+  -> About to run a step for 'child'
+  [child] Child spawned!! Sleeping for 2 seconds
+  ```
+- We're now at `await giambio.sleep(2)` inside `child`, and that puts it to sleep
+  ```
+  <- Ran a step for 'child'
+  # About to put 'child' to sleep for 2.00 seconds
+  ```
+- Ok, so now `child` is asleep while `main` is waiting on its children, and `child1` can now execute,
+  so giambio switches again and runs that
+  ```
+  -> About to run a step for 'child1'
+  [child 1] Child spawned!! Sleeping for 2 seconds
+  ```
+- Now we hit the call to `await giambio.sleep(2)` inside `child1`, so that also goes to sleep
+   ```
+   <- Ran a step for 'child1'
+   # About to put 'child1' to sleep for 2.00 seconds
+   ```
+- Since there is no other work to do, giambio just waits until it wakes up the two children,
+  2 seconds later
+  ```
+  # Task 'child' slept for 2.01 seconds
+  # Task 'child1' slept for 2.01 seconds
+  ```
+- Even though we're not doing any I/O here, giambio doesn't know that, so it
+  does some checks (and finds out there is no I/O to do)
+  ```
+  !! About to check for I/O for up to 0.00 seconds
+  !! Done I/O check (timeout 0.00 seconds)
+  ```
+- After 2 seconds have passed giambio wakes up our children and runs them until completion
+  ```
+  -> About to run a step for 'child'
+  [child] Had a nice nap!
+  << Task 'child' exited
+  -> About to run a step for 'child1'
+  [child 1] Had a nice nap!
+  << Task 'child1' exited
+  ```
+- As promised, once all children exit, the parent task resumes and runs until it exits. This also
+  causes the entire event loop to exit because there is nothing else to do
+  ```
+  -> About to run a step for 'main'
+  <- Ran a step for 'main'
+  -> About to run a step for 'main'
+  [main] Children execution complete in 2.01 seconds
+  << Task 'main' exited
+  ## Finished running
+  ```
+
+So, in our example, our children run until they hit a call to `await giambio.sleep`, then execution control
+goes back to `giambio.run`, which drives the execution for another step. This works because `giambio.sleep` and
+`giambio.run` (as well as many others) work together to make this happen: `giambio.sleep` can pause the execution
+of its children task and ask `giambio.run` to wake him up after a given amount of time
+
+__Note__: You may wonder whether you can mix async libraries: for instance, can we call `trio.sleep` in a 
+giambio application? The answer is no, we can't, and this section explains why. When you call
+`await giambio.sleep` that function talks a language that only `giambio.run` can understand. 
 Other libraries have other private "languages", so mixing them is not possible: doing so will cause 
 giambio to get very confused and most likely just explode spectacularly badly
 
-
-TODO: I/O
 
 ## Contributing
 

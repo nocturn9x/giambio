@@ -22,7 +22,7 @@ from . import exceptions
 from .traps import sleep, current_task
 from .objects import Event
 from .run import run, clock, wrap_socket, create_pool, get_event_loop, new_event_loop
-
+from .util import debug
 
 __all__ = [
     "exceptions",
@@ -34,5 +34,6 @@ __all__ = [
     "create_pool",
     "get_event_loop",
     "current_task",
-    "new_event_loop"
+    "new_event_loop",
+    "debug"
 ]
