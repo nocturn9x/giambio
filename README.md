@@ -1,4 +1,4 @@
-# giambio - Asynchronous Python made easy (and friendly)
+# Giambio - Asynchronous Python made easy (and friendly)
 
 Giambio is an event-driven concurrency library meant* to perform efficient and high-performant I/O multiplexing.
 This library implements what is known as a _stackless mode of execution_, or
