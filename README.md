@@ -6,17 +6,17 @@ This library implements what is known as a _stackless mode of execution_, or
 
 
 _*_: The library *works* (sometimes), but its still in its very early stages and is nowhere close being
-production ready, so be aware that it is likely that you'll find bugs and race conditions
+production ready, so be aware that it is likely (if not guaranteed)  that you'll find bugs and race conditions
 
-## Disclaimer
+# Disclaimer
 
 Right now this is nothing more than a toy implementation to help me understand how this whole `async`/`await` thing works
 and it is pretty much guaranteed to explode spectacularly badly while using it. If you find any bugs, please report them!
 
-Oh and by the way, this project was hugely inspired by the [curio](https://github.com/dabeaz/curio) and the
+This project was hugely inspired by the [curio](https://github.com/dabeaz/curio) and the
 [trio](https://github.com/python-trio/trio) projects, you might want to have a look at their amazing work if you need a
 rock-solid and structured concurrency framework (I personally recommend trio and that's definitely not related to the fact
-that most of the following text is ~~stolen~~ inspired from its documentation)
+that most of the content of this document is ~~stolen~~ inspired from its documentation)
 
 
 # What the hell is async anyway?
@@ -24,7 +24,7 @@ that most of the following text is ~~stolen~~ inspired from its documentation)
 Libraries like giambio shine the most when it comes to performing asynchronous I/O (reading from a socket, writing to a file, that sort of thing).
 The most common example of this is a network server that needs to handle multiple connections at the same time.
 One possible approach to achieve concurrency is to use threads, and despite their bad reputation in Python, they 
-actually might be a good choice when it comes to I/O for reasons that span far beyond the scope of this tutorial.
+actually might be a good choice when it comes to I/O for reasons that span far beyond the scope of this document.
 If you choose to use threads, there are a couple things you can do, involving what is known as _thread synchronization 
 primitives_ and _thread pools_, but once again that is beyond the purposes of this quickstart guide.
 A library like giambio comes into play when you need to perform lots of [blocking operations](https://en.wikipedia.org/wiki/Blocking_(computing)), 
@@ -100,7 +100,7 @@ provides also a set of tools, mainly for doing I/O. These functions, as you migh
 So if you wanna take advantage of giambio, and hopefully you will after reading this guide, you need to write async code.
 As an example, take this function using `giambio.sleep` (`giambio.sleep` is like `time.sleep`, but with an async flavor):
 
-__Side note__: If you have decent knowledge about asynchronous python, you might have noticed that we haven't mentioned coroutines
+__Note__: If you have decent knowledge about asynchronous python, you might have noticed that we haven't mentioned coroutines
 so far. Don't worry, that is intentional: giambio never lets a user deal with coroutines on the surface because the whole async
 model is much simpler if we take coroutines out of the game, and everything works just the same.
 
@@ -157,7 +157,7 @@ most likely that's just collateral damage caused by the missing keyword.
 If you're ok with just remembering to put `await` every time you call an async function, you can safely skip to
 the next section, but for the curios among y'all I might as well explain exactly what happened there.
 
-When coroutines are called without the `await`, they don't exactly do nothing: they return this weird 'coroutine'
+When async functions are called without the `await`, they don't exactly do nothing: they return this weird 'coroutine'
 object
 
 ```python
@@ -171,7 +171,7 @@ The reason for this is that while giambio tries to separate the async and sync w
 - It creates this weird coroutine object
 - Passes that object to `await`, which runs the function
 
-This is due to the fact that people started writing asynchronous Python code _before_ the `async`/`await` syntax was added,
+This is due to the fact that people started writing asynchronous Python code _before_ the `async`/`await` syntax was added
 so many libraries (like asyncio), had to figure out some clever hacks to make it work without native support from the language
 itself, taking advantage of generator functions (we'll talk about those later on), and coroutines are heavily based on generators.
 
@@ -183,7 +183,7 @@ runner function that can start the whole async context, but we didn't really do 
 Our previous examples could be written using sync functions (like `time.sleep`) and they would work just fine, that isn't
 quite useful is it?
 
-But here comes the reason why you would want to use a library like giambio: it can run multiple async functions __at the same time__.
+But here's the plot twist: giambio can run multiple async functions __at the same time__.
 Yep, you read that right. 
 
 To demonstrate this, have a look a this example
@@ -229,7 +229,7 @@ at the beginning of the block, and `foo.__exit__()` at the end of the block. The
 keyword just assigns the return value of `foo.__enter__()` to the variable `sth`. So
 context managers are a shorthand for calling functions, and since Python 3.5 added
 async functions, we also needed async context managers. While `with foo as sth` calls
-`foo.__enter__()`, `async with foo as sth` calls `await foo.__aenter__()`, easy huh?
+`foo.__enter__()`, `async with foo as sth` calls `await foo.__aenter__()`: easy huh?
 
 __Note__: On a related note, Python 3.5 also added asynchronous for loops! The logic is
 the same though: while `for item in container` calls `container.__next__()` to fetch the
@@ -242,12 +242,14 @@ while the other is trough an asynchronous pool. The cool part about `pool.spawn(
 that it will return immediately, without waiting for the async function to finish. So,
 now our functions are running in the background.
 After we spawn our tasks, we hit the call to `print` and the end of the block, so Python
-calls the pool's `__aexit__()` method. What this does is pause the parent task (our `main`
-async function in this case) until all children task have exited, and as it turns out, that
+`await`s the pool's `__aexit__()` method. What this does is pause the parent task (our `main`
+async function in this case) until all children tasks have exited, and as it turns out, that
 is a good thing.
 The reason why pools always wait for all children to have finished executing is that it makes
 easier propagating exceptions in the parent if something goes wrong: unlike many other frameworks,
-exceptions in giambio always behave as expected
+exceptions in giambio always behave as expected*
+
+*: This is a WIP, it doesn't work right now!
 
 
 Ok, so, let's try running this snippet and see what we get:
@@ -269,7 +271,7 @@ seconds (therefore 4 seconds total), the program just took 2
 seconds to complete, so our children are really running at the same time.
 
 If you've ever done thread programming, this will feel like home, and that's good: 
-that's exactly what we want. But beware! No threads are involved here, giambio is
+it's exactly what we want. But beware! No threads are involved here, giambio is
 running in a single thread. That's why we talked about _tasks_ rather than _threads_
 so far. The difference between the two is that you can run a lot of tasks in a single
 thread, and that with threads Python can switch which thread is running at any time.
@@ -342,7 +344,7 @@ In the above section we explained the theory behind async functions, but now we'
 `giambio.run()` and its event loop to demistify _how_ giambio makes this whole async thing happen. Luckily for us,
 giambio has some useful tooling that lets us sneak peak inside the machinery of the library to better help us
 understand what's going on, located at `giambio.debug.BaseDebugger`. That's an abstract class that we can customize
-for our purposes and that communicates with the event loop about everything it's going, so let's code it:
+for our purposes and that communicates with the event loop about everything it's doing, so let's code it:
 
 ```python
 class Debugger(giambio.debug.BaseDebugger):
@@ -399,7 +401,7 @@ if __name__ == "__main__":
     giambio.run(main, debugger=Debugger())
 ```
 
-__Note__: Note that we passed an _instance_ (see the parentheses?) **not** a class
+__Note__: We passed an _instance_ (see the parentheses?) **not** a class
 
 Running that modified code will produce a lot of output, and it should look something like this:
 
@@ -511,16 +513,16 @@ As expected, this prints _a lot_ of stuff, but let's start going trough it:
 So, in our example, our children run until they hit a call to `await giambio.sleep`, then execution control
 goes back to `giambio.run`, which drives the execution for another step. This works because `giambio.sleep` and
 `giambio.run` (as well as many others) work together to make this happen: `giambio.sleep` can pause the execution
-of its children task and ask `giambio.run` to wake him up after a given amount of time
+of its children task and ask `giambio.run` to wake him up after a given amount of time.
 
 __Note__: You may wonder whether you can mix async libraries: for instance, can we call `trio.sleep` in a 
 giambio application? The answer is no, we can't, and this section explains why. When you call
 `await giambio.sleep`, it asks `giambio.run` to pause the current task, and to do so it talks a language
 that only `giambio.run` can understand. Other libraries have other private "languages", so mixing them is
-not possible: doing so will cause  giambio to get very confused and most likely just explode spectacularly badly
+not possible: doing so will cause giambio to get very confused and most likely just explode spectacularly badly.
 
 
-## Contributing
+# Contributing
 
 This is a relatively young project and it is looking for collaborators! It's not rocket science, 
 but writing a proper framework like this implies some non-trivial issues that require proper and optimized solutions, 
