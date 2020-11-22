@@ -42,7 +42,6 @@ class Task:
     parent: object = None
     joined: bool= False
     cancel_pending: bool = False
-    waiters: list = field(default_factory=list)
     sleep_start: int = None
 
     def run(self, what=None):
@@ -131,7 +130,13 @@ class TimeQueue:
         return item in self.container
 
     def __iter__(self):
-        return iter(self.container)
+        return self
+    
+    def __next__(self):
+        try:
+            return self.get()
+        except IndexError:
+            raise StopIteration from None
 
     def __getitem__(self, item):
         return self.container.__getitem__(item)

@@ -70,7 +70,7 @@ def run(func: FunctionType, *args, **kwargs):
     elif not isinstance(func, FunctionType):
         raise GiambioError("gaibmio.run() requires an async function as parameter!")
     new_event_loop(kwargs.get("debugger", None))
-    thread_local.loop.start(func, *args)
+    get_event_loop().start(func, *args)
 
 
 def clock():

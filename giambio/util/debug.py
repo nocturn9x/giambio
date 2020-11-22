@@ -162,7 +162,7 @@ class BaseDebugger(ABC):
       This method is called right after
       the event loop has checked for I/O events
 
-      :param timeout: The max. amount of seconds
+      :param timeout: The actual amount of seconds
       that the loop has hung when using the select()
       system call
       :type timeout: int

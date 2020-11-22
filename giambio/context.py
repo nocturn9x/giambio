@@ -20,6 +20,7 @@ limitations under the License.
 import types
 from .core import AsyncScheduler
 from .objects import Task
+from .exceptions import CancelledError
 
 
 class TaskManager:
@@ -45,6 +46,7 @@ class TaskManager:
         self.loop.tasks.append(task)
         self.tasks.append(task)
         self.loop.debugger.on_task_spawn(task)
+        return task
 
     def spawn_after(self, func: types.FunctionType, n: int, *args):
         """
@@ -58,15 +60,11 @@ class TaskManager:
         self.loop.paused.put(task, n)
         self.tasks.append(task)
         self.loop.debugger.on_task_schedule(task, n)
+        return task
 
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
         for task in self.tasks:
-            try:
-                await task.join()
-            except BaseException:
-                self.tasks.remove(task)
-                for to_cancel in self.tasks:
-                    await to_cancel.cancel()
+            await task.join()

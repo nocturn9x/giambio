@@ -73,7 +73,7 @@ async def join(task):
     :type task: class: Task
     """
 
-    return await create_trap("join")
+    return await create_trap("join", task)
 
 
 async def cancel(task):
