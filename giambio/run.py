@@ -17,13 +17,14 @@ limitations under the License.
 """
 
 import socket
+import inspect
 import threading
 from .core import AsyncScheduler
 from .exceptions import GiambioError
 from .context import TaskManager
 from .socket import AsyncSocket
 from .util.debug import BaseDebugger
-from types import FunctionType, CoroutineType, GeneratorType
+from types import FunctionType
 
 
 thread_local = threading.local()
@@ -38,14 +39,16 @@ def get_event_loop():
     try:
         return thread_local.loop
     except AttributeError:
-        raise GiambioError("no event loop set") from None
+        raise GiambioError("giambio is not running") from None
 
 
 def new_event_loop(debugger: BaseDebugger):
     """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
-    called explicitly unless you know what you're doing
+    called explicitly unless you know what you're doing.
+    If an event loop is currently set and it is running,
+    a GiambioError exception is raised
     """
 
     try:
@@ -54,7 +57,7 @@ def new_event_loop(debugger: BaseDebugger):
         thread_local.loop = AsyncScheduler(debugger)
     else:
         if not loop.done():
-            raise GiambioError("cannot set event loop while running")
+            raise GiambioError("cannot change event loop while running")
         else:
             thread_local.loop = AsyncScheduler(debugger)
 
@@ -64,11 +67,11 @@ def run(func: FunctionType, *args, **kwargs):
     Starts the event loop from a synchronous entry point
     """
 
-    if isinstance(func, (CoroutineType, GeneratorType)):
+    if inspect.iscoroutine(func):
         raise GiambioError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
                            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
     elif not isinstance(func, FunctionType):
-        raise GiambioError("gaibmio.run() requires an async function as parameter!")
+        raise GiambioError("giambio.run() requires an async function as parameter!")
     new_event_loop(kwargs.get("debugger", None))
     get_event_loop().start(func, *args)
 
@@ -79,20 +82,15 @@ def clock():
     loop
     """
 
-    try:
-        return thread_local.loop.clock()
-    except AttributeError:
-        raise GiambioError("Cannot call clock from outside an async context") from None
+    return get_event_loop().clock()
 
 
 def wrap_socket(sock: socket.socket) -> AsyncSocket:
     """
     Wraps a synchronous socket into a giambio.socket.AsyncSocket
     """
-    try:
-        return thread_local.loop.wrap_socket(sock)
-    except AttributeError:
-        raise GiambioError("Cannot wrap a socket from outside an async context") from None
+
+    return get_event_loop().wrap_socket(sock)
 
 
 def create_pool():
@@ -100,8 +98,4 @@ def create_pool():
     Creates an async pool
     """
 
-    try:
-        return TaskManager(thread_local.loop)
-    except AttributeError:
-        raise GiambioError("It appears that giambio is not running, did you call giambio.create_pool()"
-                           " outside of an async context?") from None
+    return TaskManager(get_event_loop())

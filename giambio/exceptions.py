@@ -33,7 +33,7 @@ class InternalError(GiambioError):
     ...
 
 
-class CancelledError(BaseException):
+class CancelledError(GiambioError):
     """
     Exception raised by the giambio.objects.Task.cancel() method
     to terminate a child task. This should NOT be catched, or

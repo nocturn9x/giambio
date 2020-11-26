@@ -25,7 +25,6 @@ from .objects import Task, TimeQueue
 from socket import SOL_SOCKET, SO_ERROR
 from .traps import want_read, want_write
 from .util.debug import BaseDebugger
-from collections import deque
 from itertools import chain
 from .socket import AsyncSocket, WantWrite, WantRead
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
@@ -33,7 +32,6 @@ from .exceptions import (InternalError,
                          CancelledError,
                          ResourceBusy,
                          )
-
 
 
 class AsyncScheduler:
@@ -54,8 +52,9 @@ class AsyncScheduler:
         # The debugger object. If it is none we create a dummy object that immediately returns an empty
         # lambda every time you access any of its attributes to avoid lots of if self.debugger clauses
         if debugger:
-            assert issubclass(type(debugger), BaseDebugger), "The debugger must be a subclass of giambio.util.BaseDebugger"
-        self.debugger = debugger or type("DumbDebugger", (object, ), {"__getattr__": lambda *args: lambda *args: None})()
+            assert issubclass(type(debugger),
+                              BaseDebugger), "The debugger must be a subclass of giambio.util.BaseDebugger"
+        self.debugger = debugger or type("DumbDebugger", (object,), {"__getattr__": lambda *args: lambda *arg: None})()
         # Tasks that are ready to run
         self.tasks = []
         # Selector object to perform I/O multiplexing
@@ -110,7 +109,8 @@ class AsyncScheduler:
                 elif not self.tasks:
                     # If there are no actively running tasks
                     # we try to schedule the asleep ones
-                    self.awake_sleeping()
+                    if self.paused:
+                        self.awake_sleeping()
                     # The next step is checking for I/O
                     self.check_io()
                     # Try to awake event-waiting tasks
@@ -121,30 +121,36 @@ class AsyncScheduler:
                     self.current_task = self.tasks.pop(0)
                     self.debugger.before_task_step(self.current_task)
                     if self.current_task.cancel_pending:
+                        # We perform the deferred cancellation
+                        # if it was previously scheduled
                         self.do_cancel()
                     if self.to_send and self.current_task.status != "init":
+                        # A little setup to send objects from and to
+                        # coroutines outside the event loop
                         data = self.to_send
                     else:
+                        # The first time coroutines' method .send() wants None!
                         data = None
                     # Run a single step with the calculation
                     method, *args = self.current_task.run(data)
+                    # Some debugging and internal chatter here
                     self.current_task.status = "run"
                     self.current_task.steps += 1
                     self.debugger.after_task_step(self.current_task)
-                    # Data has been sent, reset it to None
+                    # If data has been sent, reset it to None
                     if self.to_send and self.current_task != "init":
                         self.to_send = None
                     # Sneaky method call, thanks to David Beazley for this ;)
                     getattr(self, method)(*args)
             except AttributeError:  # If this happens, that's quite bad!
                 raise InternalError("Uh oh! Something very bad just happened, did"
-            " you try to mix primitives from other async libraries?") from None
+                                    " you try to mix primitives from other async libraries?") from None
             except CancelledError:
                 self.current_task.status = "cancelled"
                 self.current_task.cancelled = True
                 self.current_task.cancel_pending = False
                 self.debugger.after_cancel(self.current_task)
-                self.join(self.current_task)   # TODO: Investigate if a call to join() is needed
+                # TODO: Do we need to join?
             except StopIteration as ret:
                 # Coroutine ends
                 self.current_task.status = "end"
@@ -153,20 +159,21 @@ class AsyncScheduler:
                 self.debugger.on_task_exit(self.current_task)
                 self.join(self.current_task)
             except BaseException as err:
+                # Coroutine raised
                 self.current_task.exc = err
                 self.current_task.status = "crashed"
-                self.join(self.current_task)
+                self.join(self.current_task)  # This propagates the exception
 
     def do_cancel(self, task: Task = None):
         """
         Performs task cancellation by throwing CancelledError inside the current
-        task in order to stop it from executing. The loop continues to execute
+        task in order to stop it from running. The loop continues to execute
         as tasks are independent
         """
 
         task = task or self.current_task
         self.debugger.before_cancel(task)
-        task.throw(CancelledError)
+        task.throw(CancelledError())
 
     def get_running(self):
         """
@@ -184,7 +191,6 @@ class AsyncScheduler:
         for event in self.events.copy():
             if event.set:
                 event.event_caught = True
-                event.waiters.append(self.current_task)
                 self.tasks.extend(event.waiters)
                 self.events.remove(event)
 
@@ -239,37 +245,52 @@ class AsyncScheduler:
         self.run()
         self.has_ran = True
         self.debugger.on_exit()
+        if entry.exc:
+            raise entry.exc
 
     def reschedule_joinee(self, task: Task):
         """
-        Reschedules the joinee of the
+        Reschedules the parent(s) of the
         given task, if any
         """
 
-        if task.parent:
-            self.tasks.append(task.parent)
+        for t in task.joiners:
+            if t not in self.tasks:
+                # Since a task can be the parent
+                # of multiple children, we need to
+                # make sure we reschedule it only
+                # once, otherwise a RuntimeError will
+                # occur
+                self.tasks.append(t)
 
-    def join(self, child: Task):
+    def cancel_all(self):
+        """
+        Cancels all tasks in preparation for the exception
+        throwing from self.join
+        """
+
+        for to_cancel in chain(self.tasks, self.paused):
+            try:
+                self.cancel(to_cancel)
+            except CancelledError:
+                to_cancel.status = "cancelled"
+                to_cancel.cancelled = True
+                to_cancel.cancel_pending = False
+                self.debugger.after_cancel(to_cancel)
+                self.tasks.remove(to_cancel)
+
+    def join(self, task: Task):
         """
         Handler for the 'join' event, does some magic to tell the scheduler
         to wait until the current coroutine ends
         """
 
-        child.joined = True
-        if child.finished:
-            self.reschedule_joinee(child)
-        elif child.exc:
-            for task in chain(self.tasks, self.paused):
-                try:
-                    self.cancel(task)
-                except CancelledError:
-                    task.status = "cancelled"
-                    task.cancelled = True
-                    task.cancel_pending = False
-                    self.debugger.after_cancel(task)
-                    self.tasks.remove(task)
-            child.parent.throw(child.exc)
-            self.tasks.append(child.parent)
+        task.joined = True
+        if task.finished:
+            self.reschedule_joinee(task)
+        elif task.exc:
+            self.cancel_all()
+            self.reschedule_joinee(task)
 
     def sleep(self, seconds: int or float):
         """
@@ -304,9 +325,8 @@ class AsyncScheduler:
         """
 
         self.events.add(event)
-        event.waiters.append(self.current_task)
         event.set = True
-        self.reschedule_joinee()
+        self.tasks.append(self.current_task)
 
     def event_wait(self, event):
         """
@@ -353,6 +373,7 @@ class AsyncScheduler:
             self.selector.register(sock, EVENT_WRITE, self.current_task)
         except KeyError:
             raise ResourceBusy("The given resource is busy!") from None
+
     def wrap_socket(self, sock):
         """
         Wraps a standard socket into an AsyncSocket object

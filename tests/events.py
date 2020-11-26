@@ -26,7 +26,7 @@ async def parent(pause: int = 1):
         print(f"[parent] Sleeping {pause} second(s) before setting the event")
         await giambio.sleep(pause)
         await event.trigger()
-        print("[parent] Event set, awaiting child")
+        print("[parent] Event set, awaiting child completion")
     end = giambio.clock() - start
     print(f"[parent] Child exited in {end} seconds")
 

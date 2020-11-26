@@ -20,7 +20,6 @@ limitations under the License.
 import types
 from .core import AsyncScheduler
 from .objects import Task
-from .exceptions import CancelledError
 
 
 class TaskManager:
@@ -34,7 +33,7 @@ class TaskManager:
         """
 
         self.loop = loop
-        self.tasks = []
+        self.tasks = []  # We store a reference to all tasks, even the asleep ones!
 
     def spawn(self, func: types.FunctionType, *args):
         """
@@ -42,10 +41,10 @@ class TaskManager:
         """
 
         task = Task(func(*args), func.__name__ or str(func))
-        task.parent = self.loop.current_task
+        task.joiners = [self.loop.current_task]
         self.loop.tasks.append(task)
-        self.tasks.append(task)
         self.loop.debugger.on_task_spawn(task)
+        self.tasks.append(task)
         return task
 
     def spawn_after(self, func: types.FunctionType, n: int, *args):
@@ -55,11 +54,11 @@ class TaskManager:
 
         assert n >= 0, "The time delay can't be negative"
         task = Task(func(*args), func.__name__ or str(func))
-        task.parent = self.loop.current_task
+        task.joiners = [self.loop.current_task]
         task.sleep_start = self.loop.clock()
         self.loop.paused.put(task, n)
-        self.tasks.append(task)
         self.loop.debugger.on_task_schedule(task, n)
+        self.tasks.append(task)
         return task
 
     async def __aenter__(self):

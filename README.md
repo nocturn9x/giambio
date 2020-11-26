@@ -247,9 +247,7 @@ async function in this case) until all children tasks have exited, and as it tur
 is a good thing.
 The reason why pools always wait for all children to have finished executing is that it makes
 easier propagating exceptions in the parent if something goes wrong: unlike many other frameworks,
-exceptions in giambio always behave as expected*
-
-*: This is a WIP, it doesn't work right now!
+exceptions in giambio always behave as expected
 
 
 Ok, so, let's try running this snippet and see what we get:

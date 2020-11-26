@@ -32,17 +32,17 @@ class Task:
 
     coroutine: types.CoroutineType
     name: str
-    cancelled: bool = False  # True if the task gets cancelled
+    cancelled: bool = False
     exc: BaseException = None
     result: object = None
     finished: bool = False
     status: str = "init"
     steps: int = 0
     last_io: tuple = ()
-    parent: object = None
-    joined: bool= False
+    joiners: list = field(default_factory=list)
+    joined: bool = False
     cancel_pending: bool = False
-    sleep_start: int = None
+    sleep_start: float = 0.0
 
     def run(self, what=None):
         """
@@ -78,6 +78,8 @@ class Task:
     def __del__(self):
         self.coroutine.close()
 
+    def __hash__(self):
+        return hash(self.coroutine)
 
 class Event:
     """
