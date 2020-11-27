@@ -67,9 +67,10 @@ async def main():
             pool.spawn(child1)
             print("[main] Children spawned, awaiting completion")
     except Exception as error:
-        print(f"[main] Exception from child catched! {repr(error)}")
+        # Because exceptions just *work*!
+        print(f"[main] Exception from child caught! {repr(error)}")
     print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":
-    giambio.run(main, debugger=None)
+    giambio.run(main)

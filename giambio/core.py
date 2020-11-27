@@ -150,6 +150,7 @@ class AsyncScheduler:
                 self.current_task.cancelled = True
                 self.current_task.cancel_pending = False
                 self.debugger.after_cancel(self.current_task)
+                self.join(self.current_task)
                 # TODO: Do we need to join?
             except StopIteration as ret:
                 # Coroutine ends
@@ -172,8 +173,9 @@ class AsyncScheduler:
         """
 
         task = task or self.current_task
-        self.debugger.before_cancel(task)
-        task.throw(CancelledError())
+        if not task.cancelled:
+            self.debugger.before_cancel(task)
+            task.throw(CancelledError())
 
     def get_running(self):
         """
@@ -223,9 +225,9 @@ class AsyncScheduler:
         elif self.paused:
             # If there are asleep tasks, wait until the closest deadline
             timeout = max(0.0, self.paused[0][0] - self.clock())
-        elif self.selector.get_map():
+        else:
             # If there is *only* I/O, we wait a fixed amount of time
-            timeout = 1  # TODO: Is this ok?
+            timeout = 1
         self.debugger.before_io(timeout)
         if self.selector.get_map():
             io_ready = self.selector.select(timeout)
@@ -286,7 +288,7 @@ class AsyncScheduler:
         """
 
         task.joined = True
-        if task.finished:
+        if task.finished or task.cancelled:
             self.reschedule_joinee(task)
         elif task.exc:
             self.cancel_all()
@@ -313,7 +315,7 @@ class AsyncScheduler:
 
         task = task or self.current_task
         if not task.finished and not task.exc:
-            if task.status in ("I/O", "sleep"):
+            if task.status in ("io", "sleep"):
                 # We cancel right away
                 self.do_cancel(task)
             else:
@@ -342,7 +344,7 @@ class AsyncScheduler:
         selector to perform I/0 multiplexing
         """
 
-        self.current_task.status = "I/O"
+        self.current_task.status = "io"
         if self.current_task.last_io:
             if self.current_task.last_io == ("READ", sock):
                 # Socket is already scheduled!
@@ -361,7 +363,7 @@ class AsyncScheduler:
         selector to perform I/0 multiplexing
         """
 
-        self.current_task.status = "I/O"
+        self.current_task.status = "io"
         if self.current_task.last_io:
             if self.current_task.last_io == ("WRITE", sock):
                 # Socket is already scheduled!
@@ -387,10 +389,7 @@ class AsyncScheduler:
         available and returning up to buffer bytes from the socket
         """
 
-        try:
-            return sock.recv(buffer)
-        except WantRead:
-            await want_read(sock)
+        await want_read(sock)
         return sock.recv(buffer)
 
     async def accept_sock(self, sock: socket.socket):
@@ -399,11 +398,8 @@ class AsyncScheduler:
         is available and returning the result of the accept() call
         """
 
-        try:
-            return sock.accept()
-        except WantRead:
-            await want_read(sock)
-            return sock.accept()
+        await want_read(sock)
+        return sock.accept()
 
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """
@@ -411,11 +407,8 @@ class AsyncScheduler:
         """
 
         while data:
-            try:
-                sent_no = sock.send(data)
-            except WantWrite:
-                await want_write(sock)
-                sent_no = sock.send(data)
+            await want_write(sock)
+            sent_no = sock.send(data)
             data = data[sent_no:]
 
     async def close_sock(self, sock: socket.socket):
@@ -425,7 +418,8 @@ class AsyncScheduler:
 
         await want_write(sock)
         self.selector.unregister(sock)
-        return sock.close()
+        self.current_task.last_io = ()
+        sock.close()
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         """

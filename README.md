@@ -52,7 +52,6 @@ def sync_fun():     # A regular (sync) function
 First of all, async functions like to stick together: to call an async function you need to put `await` in front of it, like below:
 
 ```python
-
 async def async_two():
     print("Hello from async_two!")
    

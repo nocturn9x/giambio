@@ -89,7 +89,7 @@ async def cancel(task):
     code, so if you really wanna do that be sure to re-raise it when done!
     """
 
-    await create_trap("cancel")
+    await create_trap("cancel", task)
     assert task.cancelled, f"Coroutine ignored CancelledError"
 
 

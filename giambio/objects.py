@@ -81,6 +81,7 @@ class Task:
     def __hash__(self):
         return hash(self.coroutine)
 
+
 class Event:
     """
     A class designed similarly to threading.Event
