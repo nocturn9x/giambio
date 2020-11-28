@@ -62,7 +62,7 @@ async def current_task():
     Gets the currently running task
     """
 
-    return await create_trap("get_running")
+    return await create_trap("get_current")
 
 
 async def join(task):
@@ -90,7 +90,7 @@ async def cancel(task):
     """
 
     await create_trap("cancel", task)
-    assert task.cancelled, f"Coroutine ignored CancelledError"
+    assert task.cancelled, f"Task ignored CancelledError"
 
 
 async def want_read(stream):
@@ -101,7 +101,7 @@ async def want_read(stream):
     :param stream: The resource that needs to be read
     """
 
-    await create_trap("want_read", stream)
+    await create_trap("read_or_write", stream, "read")
 
 
 async def want_write(stream):
@@ -112,7 +112,7 @@ async def want_write(stream):
     :param stream: The resource that needs to be written
     """
 
-    await create_trap("want_write", stream)
+    await create_trap("read_or_write", stream, "write")
 
 
 async def event_set(event):

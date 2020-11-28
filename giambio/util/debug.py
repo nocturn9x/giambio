@@ -17,7 +17,6 @@ limitations under the License.
 """
 from abc import ABC, abstractmethod
 from giambio.objects import Task
-from typing import Union
 
 
 class BaseDebugger(ABC):
@@ -44,7 +43,7 @@ class BaseDebugger(ABC):
       raise NotImplementedError
 
    @abstractmethod
-   def on_task_schedule(self, task: Task, delay: Union[int, float]):
+   def on_task_schedule(self, task: Task, delay: float):
       """
       This method is called when a new task is
       scheduled (not spawned)
@@ -54,7 +53,7 @@ class BaseDebugger(ABC):
       :type task: :class: giambio.objects.Task
       :param delay: The delay, in seconds, after which
       the task will start executing
-      :type delay: int
+      :type delay: float
       """
 
       raise NotImplementedError
@@ -111,7 +110,7 @@ class BaseDebugger(ABC):
       raise NotImplementedError
 
    @abstractmethod
-   def before_sleep(self, task: Task, seconds: Union[int, float]):
+   def before_sleep(self, task: Task, seconds: float):
       """
       This method is called before a task goes
       to sleep
@@ -127,7 +126,7 @@ class BaseDebugger(ABC):
       raise NotImplementedError
 
    @abstractmethod
-   def after_sleep(self, task: Task, seconds: Union[int, float]):
+   def after_sleep(self, task: Task, seconds: float):
       """
       This method is called after a tasks
       awakes from sleeping
@@ -137,13 +136,13 @@ class BaseDebugger(ABC):
       :type task: :class: giambio.objects.Task
       :param seconds: The amount of seconds the
       task actually slept
-      :type seconds: int
+      :type seconds: float
       """
 
       raise NotImplementedError
 
    @abstractmethod
-   def before_io(self, timeout: Union[int, float]):
+   def before_io(self, timeout: float):
       """
       This method is called right before
       the event loop checks for I/O events
@@ -151,13 +150,13 @@ class BaseDebugger(ABC):
       :param timeout: The max. amount of seconds
       that the loop will hang when using the select()
       system call
-      :type timeout: int
+      :type timeout: float
       """
 
       raise NotImplementedError
 
    @abstractmethod
-   def after_io(self, timeout: Union[int, float]):
+   def after_io(self, timeout: float):
       """
       This method is called right after
       the event loop has checked for I/O events
@@ -165,7 +164,7 @@ class BaseDebugger(ABC):
       :param timeout: The actual amount of seconds
       that the loop has hung when using the select()
       system call
-      :type timeout: int
+      :type timeout: float
       """
 
       raise NotImplementedError
@@ -192,6 +191,21 @@ class BaseDebugger(ABC):
       :param task: The Task object representing a
       giambio Task and wrapping a coroutine
       :type task: :class: giambio.objects.Task
+      """
+
+      raise NotImplementedError
+
+   @abstractmethod
+   def on_exception_raised(self, task: Task, exc: BaseException):
+      """
+      This method is called right after a task
+      has raised an exception
+
+      :param task: The Task object representing a
+      giambio Task and wrapping a coroutine
+      :type task: :class: giambio.objects.Task
+      :param exc: The exception that was raised
+      :type exc: BaseException
       """
 
       raise NotImplementedError

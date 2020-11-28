@@ -71,6 +71,8 @@ class AsyncScheduler:
         self.to_send = None
         # Have we ever ran?
         self.has_ran = False
+        # The current pool
+        self.current_pool = None
 
     def done(self):
         """
@@ -100,7 +102,7 @@ class AsyncScheduler:
         while True:
             try:
                 if self.done():
-                    # If we're done, which means there is no 
+                    # If we're done, which means there is no
                     # sleeping tasks, no events to deliver,
                     # no I/O to do and no running tasks, we
                     # simply tear us down and return to self.start
@@ -111,14 +113,17 @@ class AsyncScheduler:
                     # we try to schedule the asleep ones
                     if self.paused:
                         self.awake_sleeping()
-                    # The next step is checking for I/O
-                    self.check_io()
+                    if self.selector.get_map():
+                        # The next step is checking for I/O
+                        self.check_io()
                     # Try to awake event-waiting tasks
-                    self.check_events()
+                    if self.events:
+                        self.check_events()
                 # Otherwise, while there are tasks ready to run, well, run them!
                 while self.tasks:
                     # Sets the currently running task
                     self.current_task = self.tasks.pop(0)
+                    self.current_pool = self.current_task.pool
                     self.debugger.before_task_step(self.current_task)
                     if self.current_task.cancel_pending:
                         # We perform the deferred cancellation
@@ -151,7 +156,6 @@ class AsyncScheduler:
                 self.current_task.cancel_pending = False
                 self.debugger.after_cancel(self.current_task)
                 self.join(self.current_task)
-                # TODO: Do we need to join?
             except StopIteration as ret:
                 # Coroutine ends
                 self.current_task.status = "end"
@@ -163,21 +167,22 @@ class AsyncScheduler:
                 # Coroutine raised
                 self.current_task.exc = err
                 self.current_task.status = "crashed"
+                self.debugger.on_exception_raised(self.current_task, err)
                 self.join(self.current_task)  # This propagates the exception
 
     def do_cancel(self, task: Task = None):
         """
-        Performs task cancellation by throwing CancelledError inside the current
+        Performs task cancellation by throwing CancelledError inside the given
         task in order to stop it from running. The loop continues to execute
         as tasks are independent
         """
 
         task = task or self.current_task
-        if not task.cancelled:
+        if not task.cancelled and not task.exc:
             self.debugger.before_cancel(task)
             task.throw(CancelledError())
 
-    def get_running(self):
+    def get_current(self):
         """
         Returns the current task to an async caller
         """
@@ -218,8 +223,8 @@ class AsyncScheduler:
         Checks and schedules task to perform I/O
         """
 
-        before_time = self.clock()
-        if self.tasks or self.events and not self.selector.get_map():
+        before_time = self.clock()   # Used for the debugger
+        if self.tasks or self.events:
             # If there are either tasks or events and no I/O, never wait
             timeout = 0.0
         elif self.paused:
@@ -227,13 +232,12 @@ class AsyncScheduler:
             timeout = max(0.0, self.paused[0][0] - self.clock())
         else:
             # If there is *only* I/O, we wait a fixed amount of time
-            timeout = 1
+            timeout = 1.0
         self.debugger.before_io(timeout)
-        if self.selector.get_map():
-            io_ready = self.selector.select(timeout)
-            # Get sockets that are ready and schedule their tasks
-            for key, _ in io_ready:
-                self.tasks.append(key.data)  # Resource ready? Schedule its task
+        io_ready = self.selector.select(timeout)
+        # Get sockets that are ready and schedule their tasks
+        for key, _ in io_ready:
+            self.tasks.append(key.data)  # Resource ready? Schedule its task
         self.debugger.after_io(self.clock() - before_time)
 
     def start(self, func: types.FunctionType, *args):
@@ -241,7 +245,7 @@ class AsyncScheduler:
         Starts the event loop from a sync context
         """
 
-        entry = Task(func(*args), func.__name__ or str(func))
+        entry = Task(func(*args), func.__name__ or str(func), None)
         self.tasks.append(entry)
         self.debugger.on_start()
         self.run()
@@ -267,32 +271,49 @@ class AsyncScheduler:
 
     def cancel_all(self):
         """
-        Cancels all tasks in preparation for the exception
-        throwing from self.join
+        Cancels all tasks in the current pool,
+        preparing for the exception throwing
+        from self.join
         """
 
+        to_reschedule = []
         for to_cancel in chain(self.tasks, self.paused):
             try:
-                self.cancel(to_cancel)
+                if to_cancel.pool is self.current_pool:
+                    self.cancel(to_cancel)
+                elif to_cancel.status == "sleep":
+                    deadline = to_cancel.next_deadline - self.clock()
+                    to_reschedule.append((to_cancel, deadline))
+                else:
+                    to_reschedule.append((to_cancel, None))
             except CancelledError:
                 to_cancel.status = "cancelled"
                 to_cancel.cancelled = True
                 to_cancel.cancel_pending = False
                 self.debugger.after_cancel(to_cancel)
                 self.tasks.remove(to_cancel)
+        for task, deadline in to_reschedule:
+            if deadline is not None:
+                self.paused.put(task, deadline)
+            else:
+                self.tasks.append(task)
+        # If there is other work to do (nested pools)
+        # we tell so to our caller
+        return bool(to_reschedule)
 
     def join(self, task: Task):
         """
-        Handler for the 'join' event, does some magic to tell the scheduler
-        to wait until the current coroutine ends
+        Joins a task to its callers (implicitly, the parent
+        task, but also every other task who called await
+        task.join() on the task object)
         """
 
         task.joined = True
         if task.finished or task.cancelled:
             self.reschedule_joinee(task)
         elif task.exc:
-            self.cancel_all()
-            self.reschedule_joinee(task)
+            if not self.cancel_all():
+                self.reschedule_joinee(task)
 
     def sleep(self, seconds: int or float):
         """
@@ -300,16 +321,17 @@ class AsyncScheduler:
         """
 
         self.debugger.before_sleep(self.current_task, seconds)
-        if seconds:
+        if seconds:   # if seconds == 0, this acts as a switch!
             self.current_task.status = "sleep"
             self.current_task.sleep_start = self.clock()
             self.paused.put(self.current_task, seconds)
+            self.current_task.next_deadline = self.clock() + seconds
         else:
             self.tasks.append(self.current_task)
 
     def cancel(self, task: Task = None):
         """
-        Handler for the 'cancel' event, schedules the task to be cancelled later
+        Schedules the task to be cancelled later
         or does so straight away if it is safe to do so
         """
 
@@ -336,44 +358,30 @@ class AsyncScheduler:
         """
 
         event.waiters.append(self.current_task)
+        # Since we don't reschedule the task, it will
+        # not execute until check_events is called
 
     # TODO: More generic I/O rather than just sockets
-    def want_read(self, sock: socket.socket):
+    # Best way to do so? Probably threads
+    def read_or_write(self, sock: socket.socket, evt_type: str):
         """
-        Handler for the 'want_read' event, registers the socket inside the
+        Registers the given socket inside the
         selector to perform I/0 multiplexing
         """
 
         self.current_task.status = "io"
         if self.current_task.last_io:
-            if self.current_task.last_io == ("READ", sock):
-                # Socket is already scheduled!
-                return
-            self.selector.unregister(sock)
-        self.current_task.last_io = "READ", sock
-        try:
-            self.selector.register(sock, EVENT_READ, self.current_task)
-        except KeyError:
-            # The socket is already registered doing something else
-            raise ResourceBusy("The given resource is busy!") from None
-
-    def want_write(self, sock: socket.socket):
-        """
-        Handler for the 'want_write' event, registers the socket inside the
-        selector to perform I/0 multiplexing
-        """
-
-        self.current_task.status = "io"
-        if self.current_task.last_io:
-            if self.current_task.last_io == ("WRITE", sock):
+            if self.current_task.last_io == (evt_type, sock):
                 # Socket is already scheduled!
                 return
             # TODO: Inspect why modify() causes issues
             self.selector.unregister(sock)
-        self.current_task.last_io = "WRITE", sock
+        self.current_task.last_io = evt_type, sock
+        evt = EVENT_READ if evt_type == "read" else EVENT_WRITE
         try:
-            self.selector.register(sock, EVENT_WRITE, self.current_task)
+            self.selector.register(sock, evt, self.current_task)
         except KeyError:
+            # The socket is already registered doing something else
             raise ResourceBusy("The given resource is busy!") from None
 
     def wrap_socket(self, sock):

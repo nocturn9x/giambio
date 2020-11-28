@@ -32,6 +32,7 @@ class Task:
 
     coroutine: types.CoroutineType
     name: str
+    pool: "giambio.context.TaskManager"
     cancelled: bool = False
     exc: BaseException = None
     result: object = None
@@ -43,6 +44,7 @@ class Task:
     joined: bool = False
     cancel_pending: bool = False
     sleep_start: float = 0.0
+    next_deadline: float = 0.0
 
     def run(self, what=None):
         """

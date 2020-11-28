@@ -1,4 +1,5 @@
 import giambio
+from debugger import Debugger
 
 
 async def child():
@@ -17,7 +18,8 @@ async def main():
     start = giambio.clock()
     async with giambio.create_pool() as pool:
         pool.spawn(child)
-        pool.spawn(child1)
+        task = pool.spawn(child1)
+        await task.cancel()
         print("[main] Children spawned, awaiting completion")
     print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 

@@ -18,8 +18,8 @@ limitations under the License.
 
 
 import types
-from .core import AsyncScheduler
 from .objects import Task
+from .core import AsyncScheduler
 
 
 class TaskManager:
@@ -40,7 +40,7 @@ class TaskManager:
         Spawns a child task
         """
 
-        task = Task(func(*args), func.__name__ or str(func))
+        task = Task(func(*args), func.__name__ or str(func), self)
         task.joiners = [self.loop.current_task]
         self.loop.tasks.append(task)
         self.loop.debugger.on_task_spawn(task)
@@ -53,7 +53,7 @@ class TaskManager:
         """
 
         assert n >= 0, "The time delay can't be negative"
-        task = Task(func(*args), func.__name__ or str(func))
+        task = Task(func(*args), func.__name__ or str(func), self)
         task.joiners = [self.loop.current_task]
         task.sleep_start = self.loop.clock()
         self.loop.paused.put(task, n)
