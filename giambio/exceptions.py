@@ -37,7 +37,7 @@ class InternalError(GiambioError):
     ...
 
 
-class CancelledError(BaseException):
+class CancelledError(GiambioError):
     """
     Exception raised by the giambio.objects.Task.cancel() method
     to terminate a child task. This should NOT be caught, or
@@ -69,8 +69,8 @@ class ErrorStack(GiambioError):
     This exception wraps multiple exceptions
     and shows each individual traceback of them when
     printed. This is to ensure that no exception is
-    ever lost even if 2 or more tasks raise at the
-    same time
+    lost even if 2 or more tasks raise at the
+    same time.
     """
 
     def __init__(self, errors: List[BaseException]):

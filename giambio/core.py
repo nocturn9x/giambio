@@ -159,7 +159,6 @@ class AsyncScheduler:
                 self.debugger.on_task_exit(self.current_task)
                 self.join(self.current_task)
             except BaseException as err:
-                raise
                 # Task raised an exception
                 self.current_task.exc = err
                 self.current_task.status = "crashed"
@@ -250,7 +249,7 @@ class AsyncScheduler:
         if entry.exc:
             raise entry.exc
 
-    def reschedule_joinee(self, task: Task):
+    def reschedule_joiners(self, task: Task):
         """
         Reschedules the parent(s) of the
         given task, if any
@@ -336,13 +335,13 @@ class AsyncScheduler:
 
         task.joined = True
         if task.finished or task.cancelled:
-            self.reschedule_joinee(task)
+            self.reschedule_joiners(task)
         elif task.exc:
             if not self.cancel_all_from_current_pool():
                 # This will reschedule the parent
                 # only if any enclosed pool has
                 # already exited, which is what we want
-                self.reschedule_joinee(task)
+                self.reschedule_joiners(task)
 
     def sleep(self, seconds: int or float):
         """
@@ -412,6 +411,7 @@ class AsyncScheduler:
             # The socket is already registered doing something else
             raise ResourceBusy("The given resource is busy!") from None
 
+    # noinspection PyMethodMayBeStatic
     async def read_sock(self, sock: socket.socket, buffer: int):
         """
         Reads from a socket asynchronously, waiting until the resource is
@@ -421,10 +421,11 @@ class AsyncScheduler:
         await want_read(sock)
         return sock.recv(buffer)
 
+    # noinspection PyMethodMayBeStatic
     async def accept_sock(self, sock: socket.socket):
         """
         Accepts a socket connection asynchronously, waiting until the resource
-        is available and returning the result of the accept() call
+        is available and returning the result of the sock.accept() call
         """
 
         # TODO: Is this ok?
@@ -439,6 +440,7 @@ class AsyncScheduler:
                 # so seemed to fix the issue, needs investigation
                 await want_read(sock)
 
+    # noinspection PyMethodMayBeStatic
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """
         Sends all the passed bytes trough a socket asynchronously
@@ -460,6 +462,7 @@ class AsyncScheduler:
         self.selector.unregister(sock)
         self.current_task.last_io = ()
 
+    # noinspection PyMethodMayBeStatic
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         """
         Connects a socket asynchronously
