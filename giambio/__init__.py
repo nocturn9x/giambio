@@ -20,10 +20,11 @@ __author__ = "Nocturn9x aka Isgiambyy"
 __version__ = (1, 0, 0)
 
 
-from . import exceptions
+from . import exceptions, socket
+from .socket import wrap_socket
 from .traps import sleep, current_task
 from .objects import Event
-from .run import run, clock, wrap_socket, create_pool, get_event_loop, new_event_loop
+from .run import run, clock, create_pool, get_event_loop, new_event_loop
 from .util import debug
 
 __all__ = [

@@ -22,16 +22,17 @@ import socket
 from time import sleep as wait
 from timeit import default_timer
 from .objects import Task, TimeQueue
-from socket import SOL_SOCKET, SO_ERROR
 from .traps import want_read, want_write
 from .util.debug import BaseDebugger
 from itertools import chain
-from .socket import AsyncSocket, WantWrite, WantRead
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from .exceptions import (InternalError,
                          CancelledError,
                          ResourceBusy,
                          )
+
+
+IOInterrupt = (BlockingIOError, InterruptedError)
 
 
 class AsyncScheduler:
@@ -158,6 +159,7 @@ class AsyncScheduler:
                 self.debugger.on_task_exit(self.current_task)
                 self.join(self.current_task)
             except BaseException as err:
+                raise
                 # Task raised an exception
                 self.current_task.exc = err
                 self.current_task.status = "crashed"
@@ -307,7 +309,14 @@ class AsyncScheduler:
         """
 
         for to_cancel in chain(self.tasks, self.paused, self.get_event_tasks()):
-            self.cancel(to_cancel)
+            try:
+                self.cancel(to_cancel)
+            except CancelledError:
+                # Task was cancelled
+                self.current_task.status = "cancelled"
+                self.current_task.cancelled = True
+                self.current_task.cancel_pending = False
+                self.debugger.after_cancel(self.current_task)
 
     def close(self):
         """
@@ -315,9 +324,8 @@ class AsyncScheduler:
         inside it and tearing down any extra machinery
         """
 
-        # self.cancel_all()
-        # self.shutdown()
-        ...
+        self.cancel_all()
+        self.shutdown()
 
     def join(self, task: Task):
         """
@@ -404,13 +412,6 @@ class AsyncScheduler:
             # The socket is already registered doing something else
             raise ResourceBusy("The given resource is busy!") from None
 
-    def wrap_socket(self, sock):
-        """
-        Wraps a standard socket into an AsyncSocket object
-        """
-
-        return AsyncSocket(sock, self)
-
     async def read_sock(self, sock: socket.socket, buffer: int):
         """
         Reads from a socket asynchronously, waiting until the resource is
@@ -426,8 +427,17 @@ class AsyncScheduler:
         is available and returning the result of the accept() call
         """
 
-        await want_read(sock)
-        return sock.accept()
+        # TODO: Is this ok?
+        # This does not feel right because the loop will only
+        # exit when the socket has been accepted, preventing other
+        # stuff from running
+        while True:
+            try:
+                return sock.accept()
+            except IOInterrupt:    # Do we need this exception thingy everywhere?
+                # Some methods have never errored out, but this did and doing
+                # so seemed to fix the issue, needs investigation
+                await want_read(sock)
 
     async def sock_sendall(self, sock: socket.socket, data: bytes):
         """
@@ -446,19 +456,14 @@ class AsyncScheduler:
         """
 
         await want_write(sock)
+        sock.close()
         self.selector.unregister(sock)
         self.current_task.last_io = ()
-        sock.close()
 
     async def connect_sock(self, sock: socket.socket, addr: tuple):
         """
         Connects a socket asynchronously
         """
 
-        try:  # "Borrowed" from curio
-            return sock.connect(addr)
-        except WantWrite:
-            await want_write(sock)
-        err = sock.getsockopt(SOL_SOCKET, SO_ERROR)
-        if err != 0:
-            raise OSError(err, f"Connect call failed: {addr}")
+        await want_write(sock)
+        return sock.connect(addr)

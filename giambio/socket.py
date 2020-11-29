@@ -16,30 +16,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-
+from .run import get_event_loop
 import socket
 from .exceptions import ResourceClosed
-from .traps import sleep
 
 
-# Stolen from curio
-try:
-    from ssl import SSLWantReadError, SSLWantWriteError
-    WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
-    WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
-except ImportError:
-    WantRead = (BlockingIOError, InterruptedError)
-    WantWrite = (BlockingIOError, InterruptedError)
-
-
-class AsyncSocket(object):
+class AsyncSocket:
     """
-    Abstraction layer for asynchronous TCP sockets
+    Abstraction layer for asynchronous sockets
     """
 
-    def __init__(self, sock: socket.socket, loop):
+    def __init__(self, sock: socket.socket):
         self.sock = sock
-        self.loop = loop
+        self.loop = get_event_loop()
         self._closed = False
         self.sock.setblocking(False)
 
@@ -60,7 +49,7 @@ class AsyncSocket(object):
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
         to_wrap = await self.loop.accept_sock(self.sock)
-        return self.loop.wrap_socket(to_wrap[0]), to_wrap[1]
+        return wrap_socket(to_wrap[0]), to_wrap[1]
 
     async def send_all(self, data: bytes):
         """
@@ -98,3 +87,11 @@ class AsyncSocket(object):
 
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
+
+
+def wrap_socket(sock: socket.socket) -> AsyncSocket:
+    """
+    Wraps a standard socket into an async socket
+    """
+
+    return AsyncSocket(sock)

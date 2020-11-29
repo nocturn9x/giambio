@@ -16,14 +16,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import socket
 import inspect
 import threading
 from .core import AsyncScheduler
 from .exceptions import GiambioError
 from .context import TaskManager
 from timeit import default_timer
-from .socket import AsyncSocket
 from .util.debug import BaseDebugger
 from types import FunctionType
 
@@ -85,14 +83,6 @@ def clock():
     """
 
     return get_event_loop().clock()
-
-
-def wrap_socket(sock: socket.socket) -> AsyncSocket:
-    """
-    Wraps a synchronous socket into a giambio.socket.AsyncSocket
-    """
-
-    return get_event_loop().wrap_socket(sock)
 
 
 def create_pool():
