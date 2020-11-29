@@ -17,6 +17,10 @@ limitations under the License.
 """
 
 
+from typing import List
+import traceback
+
+
 class GiambioError(Exception):
     """
     Base class for giambio exceptions
@@ -58,3 +62,35 @@ class ResourceClosed(GiambioError):
     """
 
     ...
+
+
+class ErrorStack(GiambioError):
+    """
+    This exception wraps multiple exceptions
+    and shows each individual traceback of them when
+    printed. This is to ensure that no exception is
+    ever lost even if 2 or more tasks raise at the
+    same time
+    """
+
+    def __init__(self, errors: List[BaseException]):
+        """
+        Object constructor
+        """
+
+        super().__init__()
+        self.errors = errors
+
+    def __str__(self):
+        """
+        Returns str(self)
+        """
+
+        tracebacks = ""
+        for i, err in enumerate(self.errors):
+            if i not in (1, len(self.errors)):
+                tracebacks += f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}\n{'-' * 32}\n"
+            else:
+                tracebacks += f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}"
+        return f"Multiple errors occurred:\n{tracebacks}"
+

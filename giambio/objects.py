@@ -46,7 +46,7 @@ class Task:
     sleep_start: float = 0.0
     next_deadline: float = 0.0
 
-    def run(self, what=None):
+    def run(self, what: object = None):
         """
         Simple abstraction layer over coroutines' ``send`` method
         """

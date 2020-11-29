@@ -22,6 +22,7 @@ import threading
 from .core import AsyncScheduler
 from .exceptions import GiambioError
 from .context import TaskManager
+from timeit import default_timer
 from .socket import AsyncSocket
 from .util.debug import BaseDebugger
 from types import FunctionType
@@ -42,7 +43,7 @@ def get_event_loop():
         raise GiambioError("giambio is not running") from None
 
 
-def new_event_loop(debugger: BaseDebugger):
+def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
     """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
@@ -52,14 +53,15 @@ def new_event_loop(debugger: BaseDebugger):
     """
 
     try:
-        loop = thread_local.loop
-    except AttributeError:
-        thread_local.loop = AsyncScheduler(debugger)
+        loop = get_event_loop()
+    except GiambioError:
+        thread_local.loop = AsyncScheduler(clock, debugger)
     else:
         if not loop.done():
             raise GiambioError("cannot change event loop while running")
         else:
-            thread_local.loop = AsyncScheduler(debugger)
+            loop.close()
+            thread_local.loop = AsyncScheduler(clock, debugger)
 
 
 def run(func: FunctionType, *args, **kwargs):
@@ -72,7 +74,7 @@ def run(func: FunctionType, *args, **kwargs):
                            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
     elif not isinstance(func, FunctionType):
         raise GiambioError("giambio.run() requires an async function as parameter!")
-    new_event_loop(kwargs.get("debugger", None))
+    new_event_loop(kwargs.get("debugger", None), kwargs.get("clock", default_timer))
     get_event_loop().start(func, *args)
 
 
