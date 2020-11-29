@@ -29,6 +29,7 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from .exceptions import (InternalError,
                          CancelledError,
                          ResourceBusy,
+                         TooSlowError
                          )
 
 
@@ -151,6 +152,12 @@ class AsyncScheduler:
             except AttributeError:  # If this happens, that's quite bad!
                 raise InternalError("Uh oh! Something very bad just happened, did"
                                     " you try to mix primitives from other async libraries?") from None
+            except CancelledError:
+                # Task was cancelled (pending cancellation)
+                self.current_task.status = "cancelled"
+                self.current_task.cancelled = True
+                self.current_task.cancel_pending = False
+                self.debugger.after_cancel(self.current_task)
             except StopIteration as ret:
                 # Task finished executing
                 self.current_task.status = "end"
@@ -184,6 +191,17 @@ class AsyncScheduler:
 
         self.tasks.append(self.current_task)
         self.to_send = self.current_task
+
+    def check_timeouts(self):
+        """
+        Checks for expired timeouts and raises appropriate
+        errors
+        """
+
+        if self.clock() >= self.current_pool.timeout:
+            # A pool with a timeout has expired!
+            self.cancel_all_from_current_pool()
+            raise TooSlowError()
 
     def check_events(self):
         """

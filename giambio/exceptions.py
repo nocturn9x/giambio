@@ -64,6 +64,13 @@ class ResourceClosed(GiambioError):
     ...
 
 
+class TooSlowError(GiambioError):
+    """
+    This is raised if the timeout of a pool created using
+    giambio.with_timeout expires
+    """
+
+
 class ErrorStack(GiambioError):
     """
     This exception wraps multiple exceptions

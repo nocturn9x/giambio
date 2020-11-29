@@ -91,3 +91,11 @@ def create_pool():
     """
 
     return TaskManager(get_event_loop())
+
+
+def with_timeout(timeout: int or float):
+    """
+    Creates an async pool with an associated timeout
+    """
+
+    return TaskManager(get_event_loop(), timeout)

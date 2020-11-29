@@ -27,13 +27,15 @@ class TaskManager:
     An asynchronous context manager for giambio
     """
 
-    def __init__(self, loop: AsyncScheduler) -> None:
+    def __init__(self, loop: AsyncScheduler, timeout: float = None) -> None:
         """
         Object constructor
         """
 
         self.loop = loop
         self.tasks = []  # We store a reference to all tasks, even the asleep ones!
+        self.started = self.loop.clock()
+        self.timeout = self.started + timeout
 
     def spawn(self, func: types.FunctionType, *args):
         """
@@ -66,4 +68,7 @@ class TaskManager:
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
         for task in self.tasks:
+            # This forces Python to block at the
+            # end of the block and wait for all
+            # children to exit
             await task.join()
