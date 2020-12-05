@@ -16,11 +16,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import types
-from .traps import join, cancel, event_set, event_wait
+from giambio.traps import join, cancel, event_set, event_wait
 from heapq import heappop, heappush
-from .exceptions import GiambioError
+from giambio.exceptions import GiambioError
 from dataclasses import dataclass, field
+import typing
 
 
 @dataclass
@@ -30,7 +30,7 @@ class Task:
     A simple wrapper around a coroutine object
     """
 
-    coroutine: types.CoroutineType
+    coroutine: typing.Coroutine
     name: str
     pool: "giambio.context.TaskManager"
     cancelled: bool = False
@@ -76,9 +76,6 @@ class Task:
         """
 
         await cancel(self)
-
-    def __del__(self):
-        self.coroutine.close()
 
     def __hash__(self):
         return hash(self.coroutine)
@@ -129,6 +126,9 @@ class TimeQueue:
 
         self.clock = clock
         self.sequence = 0
+        # The sequence number handles the race condition
+        # of two tasks with identical deadlines acting
+        # as a tie breaker
         self.container = []
 
     def __contains__(self, item):
@@ -152,7 +152,7 @@ class TimeQueue:
     def __repr__(self):
         return f"TimeQueue({self.container}, clock={self.clock})"
 
-    def put(self, item, amount):
+    def put(self, item, amount: float):
         """
         Pushes an item onto the queue with its unique
         time amount and ID
@@ -167,3 +167,49 @@ class TimeQueue:
         """
 
         return heappop(self.container)[2]
+
+
+class DeadlinesQueue(TimeQueue):
+    """
+    An ordered queue for storing tasks deadlines
+    """
+
+    def __init__(self):
+        """
+        Object constructor
+        """
+
+        super().__init__(None)
+
+    def __contains__(self, item):
+        return super().__contains__(item)
+
+    def __iter__(self):
+        return super().__iter__()
+
+    def __next__(self):
+        return super().__next__()
+
+    def __getitem__(self, item):
+        return super().__getitem__(item)
+
+    def __bool__(self):
+        return super().__bool__()
+
+    def __repr__(self):
+        return f"DeadlinesQueue({self.container})"
+
+    def put(self, amount: float):
+        """
+        Pushes a deadline (timeout) onto the queue
+        """
+
+        heappush(self.container, (amount, self.sequence))
+        self.sequence += 1
+
+    def get(self):
+        """
+        Gets the first task that is meant to run
+        """
+
+        return super().get()

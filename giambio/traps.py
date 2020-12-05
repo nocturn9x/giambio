@@ -39,7 +39,7 @@ def create_trap(method, *args):
 async def sleep(seconds: int):
     """
     Pause the execution of an async function for a given amount of seconds,
-    without blocking the entire event loop, which keeps watching for other events
+    without blocking the entire event loop, which keeps watching for other events.
 
     This function is also useful as a sort of checkpoint, because it returns
     control to the scheduler, which can then switch to another task. If your code
@@ -78,7 +78,7 @@ async def join(task):
 
 async def cancel(task):
     """
-    Cancels the given task
+    Cancels the given task.
 
     The concept of cancellation is tricky, because there is no real way to 'stop'
     a task if not by raising an exception inside it and ignoring whatever it
@@ -128,7 +128,11 @@ async def event_set(event):
 async def event_wait(event):
     """
     Notifies the event loop that the current task has to wait
-    for the given event to trigger
+    for the given event to trigger. This trap returns
+    immediately if the event has already been set
     """
 
+    if event.set:
+        return
     await create_trap("event_wait", event)
+

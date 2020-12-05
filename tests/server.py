@@ -1,5 +1,6 @@
 import giambio
 from giambio.socket import AsyncSocket
+from debugger import Debugger
 import socket
 import logging
 import sys
@@ -45,9 +46,8 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 1500
     logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
     try:
-        giambio.run(serve, ("localhost", port))
+        giambio.run(serve, ("localhost", port), debugger=None)
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
-        raise
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")
         else:

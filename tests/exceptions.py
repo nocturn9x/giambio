@@ -6,13 +6,14 @@ async def child():
     print("[child] Child spawned!! Sleeping for 2 seconds")
     await giambio.sleep(2)
     print("[child] Had a nice nap!")
-    raise TypeError("rip")  # Watch the exception magically propagate!
+    # raise TypeError("rip")
 
 
 async def child1():
-    print("[child 1] Child spawned!! Sleeping for 2 seconds")
-    await giambio.sleep(2)
+    print("[child 1] Child spawned!! Sleeping for 4 seconds")
+    await giambio.sleep(4)
     print("[child 1] Had a nice nap!")
+    raise TypeError("rip")
 
 
 async def main():
@@ -29,4 +30,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    giambio.run(main, debugger=Debugger())
+    giambio.run(main, debugger=())

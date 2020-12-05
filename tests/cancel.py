@@ -17,7 +17,7 @@ async def child1():
 async def main():
     start = giambio.clock()
     async with giambio.create_pool() as pool:
-        pool.spawn(child)
+        pool.spawn(child)   # If you comment this line, the pool will exit immediately!
         task = pool.spawn(child1)
         await task.cancel()
         print("[main] Children spawned, awaiting completion")

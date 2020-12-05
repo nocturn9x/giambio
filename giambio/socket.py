@@ -16,9 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .run import get_event_loop
 import socket
-from .exceptions import ResourceClosed
+from giambio.run import get_event_loop
+from giambio.exceptions import ResourceClosed
 
 
 class AsyncSocket:

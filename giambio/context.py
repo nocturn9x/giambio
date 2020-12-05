@@ -18,8 +18,8 @@ limitations under the License.
 
 
 import types
-from .objects import Task
-from .core import AsyncScheduler
+from giambio.objects import Task
+from giambio.core import AsyncScheduler
 
 
 class TaskManager:
@@ -33,9 +33,13 @@ class TaskManager:
         """
 
         self.loop = loop
-        self.tasks = []  # We store a reference to all tasks, even the asleep ones!
+        self.tasks = []  # We store a reference to all tasks in this pool, even the paused ones!
+        self.cancelled = False
         self.started = self.loop.clock()
-        self.timeout = self.started + timeout
+        if timeout:
+            self.timeout = self.started + timeout
+        else:
+            self.timeout = None
 
     def spawn(self, func: types.FunctionType, *args):
         """
@@ -44,6 +48,7 @@ class TaskManager:
 
         task = Task(func(*args), func.__name__ or str(func), self)
         task.joiners = [self.loop.current_task]
+        task.next_deadline = self.timeout or 0.0
         self.loop.tasks.append(task)
         self.loop.debugger.on_task_spawn(task)
         self.tasks.append(task)
@@ -57,6 +62,7 @@ class TaskManager:
         assert n >= 0, "The time delay can't be negative"
         task = Task(func(*args), func.__name__ or str(func), self)
         task.joiners = [self.loop.current_task]
+        task.next_deadline = self.timeout or 0.0
         task.sleep_start = self.loop.clock()
         self.loop.paused.put(task, n)
         self.loop.debugger.on_task_schedule(task, n)
@@ -68,7 +74,17 @@ class TaskManager:
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
         for task in self.tasks:
-            # This forces Python to block at the
+            # This forces Python to stop at the
             # end of the block and wait for all
             # children to exit
             await task.join()
+            self.tasks.remove(task)
+
+    async def cancel(self):
+        """
+        Cancels the whole block
+        """
+
+        # TODO: This breaks, somehow, investigation needed
+        for task in self.tasks:
+            await task.cancel()

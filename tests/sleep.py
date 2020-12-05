@@ -2,8 +2,8 @@ import giambio
 
 
 async def child():
-    print("[child] Child spawned!! Sleeping for 2 seconds")
-    await giambio.sleep(2)
+    print("[child] Child spawned!! Sleeping for 4 seconds")
+    await giambio.sleep(4)
     print("[child] Had a nice nap!")
 
 

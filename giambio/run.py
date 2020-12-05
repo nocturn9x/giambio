@@ -18,11 +18,11 @@ limitations under the License.
 
 import inspect
 import threading
-from .core import AsyncScheduler
-from .exceptions import GiambioError
-from .context import TaskManager
+from giambio.core import AsyncScheduler
+from giambio.exceptions import GiambioError
+from giambio.context import TaskManager
 from timeit import default_timer
-from .util.debug import BaseDebugger
+from giambio.util.debug import BaseDebugger
 from types import FunctionType
 
 
@@ -70,7 +70,7 @@ def run(func: FunctionType, *args, **kwargs):
     if inspect.iscoroutine(func):
         raise GiambioError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
                            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
-    elif not isinstance(func, FunctionType):
+    elif not inspect.iscoroutinefunction(func):
         raise GiambioError("giambio.run() requires an async function as parameter!")
     new_event_loop(kwargs.get("debugger", None), kwargs.get("clock", default_timer))
     get_event_loop().start(func, *args)
