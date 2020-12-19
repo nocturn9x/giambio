@@ -13,17 +13,16 @@ async def serve(address: tuple):
     sock.bind(address)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.listen(5)
-    asock = giambio.wrap_socket(sock)   # We make the socket an async socket
+    async_sock = giambio.wrap_socket(sock)   # We make the socket an async socket
     logging.info(f"Serving asynchronously at {address[0]}:{address[1]}")
     async with giambio.create_pool() as pool:
-        while True:
-            conn, addr = await asock.accept()
-            logging.info(f"{addr[0]}:{addr[1]} connected")
-            pool.spawn(handler, conn, addr)
+        conn, address_tuple = await async_sock.accept()
+        logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
+        pool.spawn(handler, conn, address_tuple)
 
 
 async def handler(sock: AsyncSocket, addr: tuple):
-    addr = f"{addr[0]}:{addr[1]}"
+    address = f"{addr[0]}:{addr[1]}"
     async with sock:
         await sock.send_all(b"Welcome to the server pal, feel free to send me something!\n")
         while True:
@@ -36,17 +35,17 @@ async def handler(sock: AsyncSocket, addr: tuple):
                 raise TypeError("Oh, no, I'm gonna die!")
             to_send_back = data
             data = data.decode("utf-8").encode("unicode_escape")
-            logging.info(f"Got: '{data.decode('utf-8')}' from {addr}")
+            logging.info(f"Got: '{data.decode('utf-8')}' from {address}")
             await sock.send_all(b"Got: " + to_send_back)
-            logging.info(f"Echoed back '{data.decode('utf-8')}' to {addr}")
-    logging.info(f"Connection from {addr} closed")
+            logging.info(f"Echoed back '{data.decode('utf-8')}' to {address}")
+    logging.info(f"Connection from {address} closed")
 
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 1500
     logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
     try:
-        giambio.run(serve, ("localhost", port), debugger=None)
+        giambio.run(serve, ("localhost", port), debugger=Debugger())
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")

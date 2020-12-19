@@ -40,6 +40,7 @@ class TaskManager:
             self.timeout = self.started + timeout
         else:
             self.timeout = None
+        self.timed_out = False
 
     def spawn(self, func: types.FunctionType, *args):
         """
@@ -78,7 +79,6 @@ class TaskManager:
             # end of the block and wait for all
             # children to exit
             await task.join()
-            self.tasks.remove(task)
 
     async def cancel(self):
         """
@@ -88,3 +88,6 @@ class TaskManager:
         # TODO: This breaks, somehow, investigation needed
         for task in self.tasks:
             await task.cancel()
+
+    def done(self):
+        return all([task.done() for task in self.tasks])

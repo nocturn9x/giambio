@@ -59,7 +59,7 @@ async def sleep(seconds: int):
 
 async def current_task():
     """
-    Gets the currently running task
+    Gets the currently running task in an asynchronous fashion
     """
 
     return await create_trap("get_current")

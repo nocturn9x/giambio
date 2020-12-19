@@ -17,7 +17,7 @@ limitations under the License.
 """
 
 from giambio.traps import join, cancel, event_set, event_wait
-from heapq import heappop, heappush
+from heapq import heappop, heappush, heapify
 from giambio.exceptions import GiambioError
 from dataclasses import dataclass, field
 import typing
@@ -80,6 +80,9 @@ class Task:
     def __hash__(self):
         return hash(self.coroutine)
 
+    def done(self):
+        return self.exc or self.finished or self.cancelled
+
 
 class Event:
     """
@@ -101,7 +104,7 @@ class Event:
         pause() on us
         """
 
-        if self.set:
+        if self.set:  # This is set by the event loop internally
             raise GiambioError("The event has already been set")
         await event_set(self)
 
@@ -132,7 +135,17 @@ class TimeQueue:
         self.container = []
 
     def __contains__(self, item):
-        return item in self.container
+        for i in self.container:
+            if i[2] == item:
+                return True
+        return False
+
+    def discard(self, item):
+        for i in self.container:
+            if i[2] == item:
+                self.container.remove(i)
+                heapify(self.container)
+                return
 
     def __iter__(self):
         return self
@@ -180,6 +193,7 @@ class DeadlinesQueue(TimeQueue):
         """
 
         super().__init__(None)
+        self.pools = set()
 
     def __contains__(self, item):
         return super().__contains__(item)
@@ -199,17 +213,21 @@ class DeadlinesQueue(TimeQueue):
     def __repr__(self):
         return f"DeadlinesQueue({self.container})"
 
-    def put(self, amount: float):
+    def put(self, amount: float, pool):
         """
-        Pushes a deadline (timeout) onto the queue
+        Pushes a deadline (timeout) onto the queue with its associated
+        pool
         """
 
-        heappush(self.container, (amount, self.sequence))
-        self.sequence += 1
+        if pool not in self.pools:
+            self.pools.add(pool)
+            heappush(self.container, (amount, self.sequence, pool))
 
     def get(self):
         """
         Gets the first task that is meant to run
         """
 
-        return super().get()
+        d = heappop(self.container)
+        self.pools.discard(d[2])
+        return d
