@@ -149,7 +149,7 @@ class TimeQueue:
 
     def __iter__(self):
         return self
-    
+
     def __next__(self):
         try:
             return self.get()
