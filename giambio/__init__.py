@@ -1,5 +1,5 @@
 """
-Asynchronous Python made easy (and friendly)
+Giambio: Asynchronous Python made easy (and friendly)
 
 Copyright (C) 2020 nocturn9x
 
@@ -16,19 +16,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-__author__ = "Nocturn9x aka Isgiambyy"
-__version__ = (1, 0, 0)
+__author__ = "Nocturn9x"
+__version__ = (0, 0, 1)
 
 
-from . import exceptions, socket
+from . import exceptions, socket, context, core
 from .socket import wrap_socket
 from .traps import sleep, current_task
 from .objects import Event
 from .run import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout
 from .util import debug
 
+
 __all__ = [
     "exceptions",
+    "core",
+    "context",
     "sleep",
     "Event",
     "run",

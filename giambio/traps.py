@@ -101,7 +101,7 @@ async def want_read(stream):
     :param stream: The resource that needs to be read
     """
 
-    await create_trap("read_or_write", stream, "read")
+    await create_trap("register_sock", stream, "read")
 
 
 async def want_write(stream):
@@ -112,7 +112,7 @@ async def want_write(stream):
     :param stream: The resource that needs to be written
     """
 
-    await create_trap("read_or_write", stream, "write")
+    await create_trap("register_sock", stream, "write")
 
 
 async def event_set(event):

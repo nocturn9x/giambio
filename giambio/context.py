@@ -1,5 +1,5 @@
 """
-Higher-level context managers for async pools
+Higher-level context manager(s) for async pools
 
 Copyright (C) 2020 nocturn9x
 
@@ -16,38 +16,50 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-
+import giambio
 import types
-from giambio.objects import Task
-from giambio.core import AsyncScheduler
+from typing import List
 
 
 class TaskManager:
     """
     An asynchronous context manager for giambio
+
+    :param loop: The event loop bound to this pool. Most of the times
+    it's the return value from giambio.get_event_loop()
+    :type loop: :class: AsyncScheduler
+    :param timeout: The pool's timeout length in seconds, if any, defaults to None
+    :type timeout: float, optional
     """
 
-    def __init__(self, loop: AsyncScheduler, timeout: float = None) -> None:
+    def __init__(self, loop: "giambio.core.AsyncScheduler", timeout: float = None) -> None:
         """
         Object constructor
         """
 
-        self.loop = loop
-        self.tasks = []  # We store a reference to all tasks in this pool, even the paused ones!
-        self.cancelled = False
-        self.started = self.loop.clock()
+        # The event loop associated with this pool
+        self.loop: "giambio.core.AsyncScheduler" = loop
+        # All the tasks that belong to this pool
+        self.tasks: List[giambio.objects.Task] = []
+        # Whether we have been cancelled or not
+        self.cancelled: bool = False
+        # The clock time of when we started running, used for
+        # timeouts expiration
+        self.started: float = self.loop.clock()
+        # The pool's timeout (in seconds)
         if timeout:
-            self.timeout = self.started + timeout
+            self.timeout: float = self.started + timeout
         else:
-            self.timeout = None
-        self.timed_out = False
+            self.timeout: None = None
+        # Whether our timeout expired or not
+        self.timed_out: bool = False
 
-    def spawn(self, func: types.FunctionType, *args):
+    def spawn(self, func: types.FunctionType, *args) -> "giambio.objects.Task":
         """
         Spawns a child task
         """
 
-        task = Task(func(*args), func.__name__ or str(func), self)
+        task = giambio.objects.Task(func.__name__ or str(func), func(*args), self)
         task.joiners = [self.loop.current_task]
         task.next_deadline = self.timeout or 0.0
         self.loop.tasks.append(task)
@@ -55,13 +67,13 @@ class TaskManager:
         self.tasks.append(task)
         return task
 
-    def spawn_after(self, func: types.FunctionType, n: int, *args):
+    def spawn_after(self, func: types.FunctionType, n: int, *args) -> "giambio.objects.Task":
         """
         Schedules a task for execution after n seconds
         """
 
         assert n >= 0, "The time delay can't be negative"
-        task = Task(func(*args), func.__name__ or str(func), self)
+        task = giambio.objects.Task(func.__name__ or str(func), func(*args), self)
         task.joiners = [self.loop.current_task]
         task.next_deadline = self.timeout or 0.0
         task.sleep_start = self.loop.clock()
@@ -71,23 +83,39 @@ class TaskManager:
         return task
 
     async def __aenter__(self):
+        """
+        Implements the asynchronous context manager interface,
+        marking the pool as started and returning itself
+        """
+
         return self
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
+        """
+        Implements the asynchronous context manager interface, joining
+        all the tasks spawned inside the pool
+        """
+
         for task in self.tasks:
-            # This forces Python to stop at the
+            # This forces the interpreter to stop at the
             # end of the block and wait for all
             # children to exit
             await task.join()
 
     async def cancel(self):
         """
-        Cancels the whole block
+        Cancels the pool entirely, iterating over all
+        the pool's tasks and cancelling them
         """
 
         # TODO: This breaks, somehow, investigation needed
         for task in self.tasks:
             await task.cancel()
 
-    def done(self):
+    def done(self) -> bool:
+        """
+        Returns True if all the tasks inside the
+        pool have exited, False otherwise
+        """
+
         return all([task.done() for task in self.tasks])
