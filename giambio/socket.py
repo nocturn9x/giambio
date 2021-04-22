@@ -1,5 +1,4 @@
-"""
-Basic abstraction layer for giambio asynchronous sockets
+""" Basic abstraction layer for giambio asynchronous sockets
 
 Copyright (C) 2020 nocturn9x
 
@@ -88,7 +87,8 @@ class AsyncSocket:
         that's gone out of scope without being closed
         """
 
-        self.loop.selector.unregister(self.sock)
+        if not self._closed and self.loop.selector.get_map() and self.sock in self.loop.selector.get_map():
+            self.loop.selector.unregister(self.sock)
 
     async def __aenter__(self):
         return self
