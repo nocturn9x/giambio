@@ -35,10 +35,8 @@ async def main():
             pool.spawn(child1)
             print("[main] Children spawned, awaiting completion")
             async with giambio.create_pool() as new_pool:
-                # This pool won't be affected from exceptions
-                # in outer pools. This is a guarantee that giambio
-                # ensures: an exception will only be propagated
-                # after all enclosed task pools have exited
+                # This pool will be cancelled by the exception
+                # in the other pool
                 new_pool.spawn(child2)
                 new_pool.spawn(child3)
                 print("[main] 3rd child spawned")

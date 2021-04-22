@@ -504,6 +504,13 @@ class AsyncScheduler:
                 # pool have finished executing, either
                 # by cancellation, an exception
                 # or just returned
+                for t in task.joiners:
+                    # Propagate the exception
+                    try:
+                        t.throw(task.exc)
+                    except StopIteration:
+                        # TODO: Need anything else?
+                        task.joiners.remove(t)
                 self.reschedule_joiners(task)
 
     def sleep(self, seconds: int or float):
