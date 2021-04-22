@@ -79,6 +79,17 @@ class AsyncSocket:
             raise ResourceClosed("I/O operation on closed socket")
         await self.loop.connect_sock(self.sock, addr)
 
+    def __del__(self):
+        """
+        Implements the destructor for the async socket,
+        notifying the event loop that the socket must not
+        be listened for anymore. This avoids the loop
+        blocking forever on trying to read from a socket
+        that's gone out of scope without being closed
+        """
+
+        self.loop.selector.unregister(self.sock)
+
     async def __aenter__(self):
         return self
 
