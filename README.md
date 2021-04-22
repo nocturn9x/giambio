@@ -159,8 +159,7 @@ the next section, but for the curios among y'all I might as well explain exactly
 When async functions are called without the `await`, they don't exactly do nothing: they return this weird 'coroutine'
 object
 
-```python
-
+```
 >>> giambio.sleep(1)
 <coroutine object sleep at 0x1069520d0>
 ```
@@ -518,6 +517,201 @@ giambio application? The answer is no, we can't, and this section explains why. 
 that only `giambio.run` can understand. Other libraries have other private "languages", so mixing them is
 not possible: doing so will cause giambio to get very confused and most likely just explode spectacularly badly.
 
+
+## Doing I/O
+
+I don't know about you, but to me all of the code we wrote so far was pretty boring. But here comes the fun part: now
+I'll show you how to do actual work with giambio using its I/O primitives.
+
+__Note__: As with everything in giambio, I/O support is limited and experimental. Any socket kind from python's builtin
+socket module can be used with giambio, but other advanced features such as file I/O or memory channels simply don't
+exist yet
+
+
+### An echo server
+
+For the purposes of this document, it's best to keep things simple, so we'll be writing the "Hello, world!" of
+network servers: an echo server. An echo server simply replies to the client with the same data that it got from it
+
+As always, I'll first throw the entire snippet at you and then disassemble it step by step, but since this code is
+a little longer than usual we'll be dealing with one function at a time: first, let's write a function that can accept
+clients and dispatch them to some other handler.
+
+```python
+import giambio
+import socket
+import logging
+
+
+async def serve(bind_address: tuple):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(bind_address)
+    sock.listen(5)
+    async_sock = giambio.wrap_socket(sock)   # We make the socket an async socket
+    logging.info(f"Serving asynchronously at {bind_address[0]}:{bind_address[1]}")
+    async with giambio.create_pool() as pool:
+        while True:
+            conn, address_tuple = await async_sock.accept()
+            logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
+            pool.spawn(handler, conn, address_tuple)
+
+```
+
+So, our `serve` function does a few things:
+- Sets up our server socket, just like in a synchronous server (notice how we bind and listen **before** wrapping it)
+- Uses giambio's `wrap_socket` function to wrap the plain old synchronous socket into an async one
+- Opens a task pool and starts listening for clients in loop by using our new `giambio.socket.AsyncSocket` object
+    - Notice how we use `await async_sock.accept()` and not `sock.accept()`, because that could block the loop
+- Once a client connects, we log some information, spawn a new task and pass it the client socket: that is our client handler
+
+So, let's go over the declaration of `handler` then:
+
+```python
+async def handler(sock, client_address):
+    address = f"{client_address[0]}:{client_address[1]}"
+    async with sock:   # Closes the socket automatically
+        await sock.send_all(b"Welcome to the server pal, feel free to send me something!\n")
+        while True:
+            await sock.send_all(b"-> ")
+            data = await sock.receive(1024)
+            if not data:
+                break
+            elif data == b"exit\n":
+                await sock.send_all(b"Shutting down the server\n")
+                raise Exception  # This kills the entire application!
+            logging.info(f"Got: {data!r} from {address}")
+            await sock.send_all(b"Got: " + data)
+            logging.info(f"Echoed back {data!r} to {address}")
+    logging.info(f"Connection from {address} closed")
+```
+
+This is where clients will be dispatched once they connect:
+- First, we use the tuple that `serve` gave us to build a nice human-readable IP address
+- giambio sockets support the context manager interface, just like regular sockets, so we use `async with sock` which
+    will automatically close the socket for us when we're done using it
+- Since we're nice people, we greet our users once they connect with a welcome message (notice: we sent **bytes**!)
+    - As a side note, regular python sockets differentiate `sock.send` from `sock.sendall`: The difference is that `send` might
+    not send the whole payload immediately, while `sendall` is just a wrapper around `send` in a loop which makes sure
+    that all data is sent before returning. Since this difference is completely unnecessary and can lead to errors,
+    giambio sockets only have a `send_all` method which **always** sends all the passed data before returning, but the
+    naming was kept explicit because of the ambiguity caused by the builtin socket library.
+- With the greetings out of the way, we enter a loop where we ask our client for data by using the `receive` method. Note that, just
+    like regular python sockets' `recv` method, `receive` is guaranteed to return **at most** 1024 bytes, but **at least** 1 byte 
+    (or any size in that range) depending on your OS buffers and network congestion
+- We do a little check here: if what we receive is an empty message, then our client is gone and we can exit the loop
+- Since I want to show off giambio's exception handling, I added a little if condition that will raise an exception if a client
+    sends us a message with "exit" as content: this will propagate the task in our `serve` function and kill all children tasks
+- Here comes the "echo" part of "echo server": We log the message to the screen and then send the same data back to our client
+
+Finally, some startup code:
+
+```python
+
+if __name__ == "__main__":
+    logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
+    try:
+        giambio.run(serve, ("localhost", 1500))
+    except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
+        if isinstance(error, KeyboardInterrupt):
+            logging.info("Ctrl+C detected, exiting")
+        else:
+            logging.error(f"Exiting due to a {type(error).__name__}: {error}")
+```
+
+This looks fancy, but all it does is just run our server and catch any exception that might happen (because, again, exceptions are never discarded
+in giambio): We differentiate KeyboardInterrupt from anything else because that is most likely us shutting down the server from the console.
+
+So, putting everything together:
+
+```python
+
+import giambio
+import socket
+import logging
+
+
+async def handler(sock, client_address):
+    address = f"{client_address[0]}:{client_address[1]}"
+    async with sock:   # Closes the socket automatically
+        await sock.send_all(b"Welcome to the server pal, feel free to send me something!\n")
+        while True:
+            await sock.send_all(b"-> ")
+            data = await sock.receive(1024)
+            if not data:
+                break
+            elif data == b"exit\n":
+                await sock.send_all(b"Shutting down the server\n")
+                raise Exception  # This kills the entire application!
+            logging.info(f"Got: {data!r} from {address}")
+            await sock.send_all(b"Got: " + data)
+            logging.info(f"Echoed back {data!r} to {address}")
+    logging.info(f"Connection from {address} closed")
+
+
+async def serve(bind_address):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(bind_address)
+    sock.listen(5)
+    async_sock = giambio.wrap_socket(sock)   # We make the socket an async socket
+    logging.info(f"Serving asynchronously at {bind_address[0]}:{bind_address[1]}")
+    async with giambio.create_pool() as pool:
+        while True:
+            conn, address_tuple = await async_sock.accept()
+            logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
+            pool.spawn(handler, conn, address_tuple)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
+    try:
+        giambio.run(serve, ("localhost", 1500))
+    except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
+        if isinstance(error, KeyboardInterrupt):
+            logging.info("Ctrl+C detected, exiting")
+        else:
+            logging.error(f"Exiting due to a {type(error).__name__}: {error}")
+```
+
+Save this into a file and try running it, you should see something along the lines of:
+```
+[INFO] 22/04/2021 PM Serving asynchronously at localhost:1500
+
+```
+Yay! Our echo server is running, let's test it out by using the netcat terminal utility:
+```
+user@hostname:~ # nc localhost 1501
+Welcome to the server pal, feel free to send me something!
+-> async server test
+Got: async server test
+-> yay!
+Got: yay!
+```
+
+And, on the server side...
+```
+[INFO] 22/04/2021 PM 127.0.0.1:52239 connected
+[INFO] 22/04/2021 PM Got: b'async server test\n' from 127.0.0.1:52239
+[INFO] 22/04/2021 PM Echoed back b'async server test\n' to 127.0.0.1:52239
+[INFO] 22/04/2021 PM Got: b'yay!\n' from 127.0.0.1:52239
+[INFO] 22/04/2021 PM Echoed back b'yay!\n' to 127.0.0.1:52239
+```
+
+Try opening more terminal windows concurrently and sending messages all at once, you'll see that they all
+get replied to at the same time! That's the power of async.
+
+Just to wrap up, try sending "exit" as a message:
+```
+-> exit
+Shutting down the server
+```
+
+And on our server, as expected:
+```
+[ERROR] 22/04/2021 PM Exiting due to a Exception:
+```
+
+If you want to play around with this code you can also try pressing Ctrl+D/Ctrl+C on netcat to close your connection,
+or Ctrl+C on the server's console to shut it down completely.
 
 # Contributing
 
