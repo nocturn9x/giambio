@@ -2,16 +2,10 @@ import giambio
 from debugger import Debugger
 
 
-async def child():
-    print("[child] Child spawned!! Sleeping for 5 seconds")
-    await giambio.sleep(5)
-    print("[child] Had a nice nap!")
-
-
-async def child1():
-    print("[child 1] Child spawned!! Sleeping for 10 seconds")
-    await giambio.sleep(10)
-    print("[child 1] Had a nice nap!")
+async def child(name: int):
+    print(f"[child {name}] Child spawned!! Sleeping for {name} seconds")
+    await giambio.sleep(name)
+    print(f"[child {name}] Had a nice nap!")
 
 
 async def main():
@@ -20,9 +14,9 @@ async def main():
         async with giambio.with_timeout(6) as pool:
             # TODO: We need to consider the inner part of
             #  the with block as an implicit task, otherwise
-            #  timeouts and cancellations won't work properly!
-            pool.spawn(child)  # This will complete
-            pool.spawn(child1)  # This will not
+            #  timeouts and cancellations won't work with await fn()!
+            pool.spawn(child, 5)  # This will complete
+            pool.spawn(child, 10)  # This will not
             print("[main] Children spawned, awaiting completion")
     except giambio.exceptions.TooSlowError:
         print("[main] One or more children have timed out!")

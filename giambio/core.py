@@ -151,9 +151,6 @@ class AsyncScheduler:
                         # we still need to make sure we don't try to execute
                         # exited tasks that are on the running queue
                         continue
-                    # Sets the current pool: we need this to take nested pools
-                    # into account and behave accordingly
-                    self.current_pool = self.current_task.pool
                     if self.current_pool and self.current_pool.timeout and not self.current_pool.timed_out:
                         # Stores deadlines for tasks (deadlines are pool-specific).
                         # The deadlines queue will internally make sure not to store
@@ -283,6 +280,27 @@ class AsyncScheduler:
             self.tasks.append(task)
             self.debugger.after_sleep(task, slept)
 
+    def get_closest_deadline(self) -> float:
+        """
+        Gets the closest expiration deadline (asleep tasks, timeouts)
+
+        :return: The closest deadline according to our clock
+        :rtype: float
+        """
+
+        if not self.deadlines:
+            # If there are no deadlines just wait until the first task wakeup
+            timeout = max(0.0, self.paused.get_closest_deadline() - self.clock())
+        elif not self.paused:
+            # If there are no sleeping tasks just wait until the first deadline
+            timeout = max(0.0, self.deadlines.get_closest_deadline() - self.clock())
+        else:
+            # If there are both deadlines AND sleeping tasks scheduled, we calculate
+            # the absolute closest deadline among the two sets and use that as a timeout
+            clock = self.clock()
+            timeout = min([max(0.0, self.paused.get_closest_deadline() - clock), self.deadlines.get_closest_deadline() - clock])
+        return timeout
+
     def check_io(self):
         """
         Checks for I/O and implements part of the sleeping mechanism
@@ -306,18 +324,7 @@ class AsyncScheduler:
                 timeout = 0.0
         elif self.paused or self.deadlines:
             # If there are asleep tasks or deadlines, wait until the closest date
-            if not self.deadlines:
-                # If there are no deadlines just wait until the first task wakeup
-                timeout = min([max(0.0, self.paused.get_closest_deadline() - self.clock())])
-            elif not self.paused:
-                # If there are no sleeping tasks just wait until the first deadline
-                timeout = min([max(0.0, self.deadlines.get_closest_deadline() - self.clock())])
-            else:
-                # If there are both deadlines AND sleeping tasks scheduled, we calculate
-                # the absolute closest deadline among the two sets and use that as a timeout
-                clock = self.clock()
-                timeout = min([max(0.0, self.paused.get_closest_deadline() - clock),
-                               self.deadlines.get_closest_deadline() - clock])
+            timeout = self.get_closest_deadline()
         else:
             # If there is *only* I/O, we wait a fixed amount of time
             timeout = 86400   # Stolen from trio :D
@@ -342,7 +349,7 @@ class AsyncScheduler:
         if entry.exc:
             raise entry.exc
 
-    def cancel_pool(self, pool: TaskManager):
+    def cancel_pool(self, pool: TaskManager) -> bool:
         """
         Cancels all tasks in the given pool
 
@@ -362,7 +369,7 @@ class AsyncScheduler:
         else:   # If we're at the main task, we're sure everything else exited
             return True
 
-    def get_event_tasks(self):
+    def get_event_tasks(self) -> Task:
         """
         Yields all tasks currently waiting on events
         """
@@ -371,7 +378,7 @@ class AsyncScheduler:
             for waiter in evt.waiters:
                 yield waiter
 
-    def get_asleep_tasks(self):
+    def get_asleep_tasks(self) -> Task:
         """
         Yields all tasks that are currently sleeping
         """
@@ -379,7 +386,7 @@ class AsyncScheduler:
         for asleep in self.paused.container:
             yield asleep[2]   # Deadline, tiebreaker, task
 
-    def get_io_tasks(self):
+    def get_io_tasks(self) -> Task:
         """
         Yields all tasks currently waiting on I/O resources
         """
@@ -387,7 +394,7 @@ class AsyncScheduler:
         for k in self.selector.get_map().values():
             yield k.data
 
-    def get_all_tasks(self):
+    def get_all_tasks(self) -> chain:
         """
         Returns a generator yielding all tasks which the loop is currently
         keeping track of: this includes both running and paused tasks.
@@ -463,6 +470,20 @@ class AsyncScheduler:
                 # occur
                 self.tasks.append(t)
 
+    def is_pool_done(self, pool: TaskManager) -> bool:
+        """
+        Returns true if the given pool has finished
+        running and can be safely terminated
+
+        :return: Whether the pool and any enclosing pools finished running
+        :rtype:  bool
+        """
+
+        if not pool:
+            # The parent task has no pool
+            return True
+        return pool.done()
+
     def join(self, task: Task):
         """
         Joins a task to its callers (implicitly, the parent
@@ -472,7 +493,7 @@ class AsyncScheduler:
 
         task.joined = True
         if task.finished or task.cancelled:
-            if self.current_pool and self.current_pool.done() or not self.current_pool:
+            if self.is_pool_done(self.current_pool):
                 # If the current pool has finished executing or we're at the first parent
                 # task that kicked the loop, we can safely reschedule the parent(s)
                 self.reschedule_joiners(task)
@@ -512,6 +533,7 @@ class AsyncScheduler:
         """
 
         if task.done():
+            self.ensure_discard(task)
             # The task isn't running already!
             return
         elif task.status in ("io", "sleep", "init"):
@@ -528,7 +550,7 @@ class AsyncScheduler:
                 # But we also need to cancel a task if it was not sleeping or waiting on
                 # any I/O because it could never do so (therefore blocking everything
                 # forever). So, when cancellation can't be done right away, we schedule
-                # if for the next execution step of the task. Giambio will also make sure
+                # it for the next execution step of the task. Giambio will also make sure
                 # to re-raise cancellations at every checkpoint until the task lets the
                 # exception propagate into us, because we *really* want the task to be
                 # cancelled
@@ -642,7 +664,15 @@ class AsyncScheduler:
         """
 
         await want_read(sock)
-        return sock.accept()
+        try:
+            return sock.accept()
+        except BlockingIOError:
+            # Some platforms (namely OSX systems) act weird and handle
+            # the errno 35 signal (EAGAIN) for sockets in a weird manner,
+            # and this seems to fix the issue. Not sure about why since we
+            # already called want_read above, but it ain't stupid if it works I guess
+            await want_read(sock)
+            return sock.accept()
 
     # noinspection PyMethodMayBeStatic
     async def sock_sendall(self, sock: socket.socket, data: bytes):
@@ -657,7 +687,11 @@ class AsyncScheduler:
 
         while data:
             await want_write(sock)
-            sent_no = sock.send(data)
+            try:
+                sent_no = sock.send(data)
+            except BlockingIOError:
+                await want_write(sock)
+                sent_no = sock.send(data)
             data = data[sent_no:]
 
     async def close_sock(self, sock: socket.socket):
@@ -669,7 +703,11 @@ class AsyncScheduler:
         """
 
         await want_write(sock)
-        sock.close()
+        try:
+            sock.close()
+        except BlockingIOError:
+            await want_write(sock)
+            sock.close()
         self.selector.unregister(sock)
         self.current_task.last_io = ()
 
@@ -687,4 +725,8 @@ class AsyncScheduler:
         """
 
         await want_write(sock)
-        return sock.connect(address_tuple)
+        try:
+            return sock.connect(address_tuple)
+        except BlockingIOError:
+            await want_write(sock)
+            return sock.connect(address_tuple)

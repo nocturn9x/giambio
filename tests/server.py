@@ -67,3 +67,4 @@ if __name__ == "__main__":
             logging.info("Ctrl+C detected, exiting")
         else:
             logging.error(f"Exiting due to a {type(error).__name__}: {error}")
+            raise
