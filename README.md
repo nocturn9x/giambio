@@ -19,6 +19,13 @@ rock-solid and structured concurrency framework (I personally recommend trio and
 that most of the content of this document is ~~stolen~~ inspired from its documentation)
 
 
+## Current limitations
+
+As I already mentioned, giambio is **highly** experimental and there's a lot to work to do before it's usable. Namely:
+- Ensure cancellations work 100% of the time even when `await`ing functions and not spawning them
+- Extend I/O functionality
+- Add task synchronization primitives such as locks and semaphores (events *sort of* work now)
+
 # What the hell is async anyway?
 
 Libraries like giambio shine the most when it comes to performing asynchronous I/O (reading from a socket, writing to a file, that sort of thing).
@@ -539,29 +546,26 @@ clients and dispatch them to some other handler.
 
 ```python
 import giambio
-import socket
 import logging
 
 
 async def serve(bind_address: tuple):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(bind_address)
-    sock.listen(5)
-    async_sock = giambio.wrap_socket(sock)   # We make the socket an async socket
+    sock = giambio.socket.socket()
+    await sock.bind(bind_address)
+    await sock.listen(5)
     logging.info(f"Serving asynchronously at {bind_address[0]}:{bind_address[1]}")
     async with giambio.create_pool() as pool:
         while True:
-            conn, address_tuple = await async_sock.accept()
+            conn, address_tuple = await sock.accept()
             logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
             pool.spawn(handler, conn, address_tuple)
 
 ```
 
 So, our `serve` function does a few things:
-- Sets up our server socket, just like in a synchronous server (notice how we bind and listen **before** wrapping it)
-- Uses giambio's `wrap_socket` function to wrap the plain old synchronous socket into an async one
+- Sets up our server socket, just like in a synchronous server
 - Opens a task pool and starts listening for clients in loop by using our new `giambio.socket.AsyncSocket` object
-    - Notice how we use `await async_sock.accept()` and not `sock.accept()`, because that could block the loop
+    - Notice how we use `await sock.accept()` and not `sock.accept()`, because that is an asynchronous socket!
 - Once a client connects, we log some information, spawn a new task and pass it the client socket: that is our client handler
 
 So, let's go over the declaration of `handler` then:

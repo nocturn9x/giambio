@@ -21,7 +21,6 @@ __version__ = (0, 0, 1)
 
 
 from . import exceptions, socket, context, core
-from .socket import wrap_socket
 from .traps import sleep, current_task
 from .objects import Event
 from .run import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout
@@ -36,11 +35,10 @@ __all__ = [
     "Event",
     "run",
     "clock",
-    "wrap_socket",
     "create_pool",
     "with_timeout",
     "get_event_loop",
     "current_task",
     "new_event_loop",
-    "debug"
+    "debug",
 ]

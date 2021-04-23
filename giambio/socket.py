@@ -15,9 +15,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import socket
+import socket as builtin_socket
 from giambio.run import get_event_loop
 from giambio.exceptions import ResourceClosed
+from giambio.traps import want_write, want_read
 
 
 class AsyncSocket:
@@ -25,7 +26,7 @@ class AsyncSocket:
     Abstraction layer for asynchronous sockets
     """
 
-    def __init__(self, sock: socket.socket):
+    def __init__(self, sock: builtin_socket.socket):
         self.sock = sock
         self.loop = get_event_loop()
         self._closed = False
@@ -38,7 +39,13 @@ class AsyncSocket:
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        return await self.loop.read_sock(self.sock, max_size)
+        assert max_size >= 1, "max_size must be >= 1"
+        await want_read(self.sock)
+        try:
+            return self.sock.recv(max_size)
+        except BlockingIOError:
+            await want_read(self.sock)
+        return self.sock.recv(max_size)
 
     async def accept(self):
         """
@@ -47,7 +54,16 @@ class AsyncSocket:
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        to_wrap = await self.loop.accept_sock(self.sock)
+        await want_read(self.sock)
+        try:
+            to_wrap = self.sock.accept()
+        except BlockingIOError:
+            # Some platforms (namely OSX systems) act weird and handle
+            # the errno 35 signal (EAGAIN) for sockets in a weird manner,
+            # and this seems to fix the issue. Not sure about why since we
+            # already called want_read above, but it ain't stupid if it works I guess
+            await want_read(self.sock)
+            to_wrap = self.sock.accept()
         return wrap_socket(to_wrap[0]), to_wrap[1]
 
     async def send_all(self, data: bytes):
@@ -57,7 +73,14 @@ class AsyncSocket:
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        return await self.loop.sock_sendall(self.sock, data)
+        while data:
+            await want_write(self.sock)
+            try:
+                sent_no = self.sock.send(data)
+            except BlockingIOError:
+                await want_write(self.sock)
+                sent_no = self.sock.send(data)
+            data = data[sent_no:]
 
     async def close(self):
         """
@@ -66,7 +89,14 @@ class AsyncSocket:
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await self.loop.close_sock(self.sock)
+        await want_write(self.sock)
+        try:
+            self.sock.close()
+        except BlockingIOError:
+            await want_write(self.sock)
+            self.sock.close()
+        self.loop.selector.unregister(self.sock)
+        self.loop.current_task.last_io = ()
         self._closed = True
 
     async def connect(self, addr: tuple):
@@ -76,7 +106,36 @@ class AsyncSocket:
 
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
-        await self.loop.connect_sock(self.sock, addr)
+        await want_write(self.sock)
+        try:
+            self.sock.connect(addr)
+        except BlockingIOError:
+            await want_write(self.sock)
+            self.sock.connect(addr)
+
+    async def bind(self, addr: tuple):
+        """
+        Binds the socket to an address
+
+        :param addr: The address, port tuple to bind to
+        :type addr: tuple
+        """
+
+        if self._closed:
+            raise ResourceClosed("I/O operation on closed socket")
+        self.sock.bind(addr)
+
+    async def listen(self, backlog: int):
+        """
+        Starts listening with the given backlog
+
+        :param backlog: The address, port tuple to bind to
+        :type backlog: int
+        """
+
+        if self._closed:
+            raise ResourceClosed("I/O operation on closed socket")
+        self.sock.listen(backlog)
 
     def __del__(self):
         """
@@ -100,9 +159,20 @@ class AsyncSocket:
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"
 
 
-def wrap_socket(sock: socket.socket) -> AsyncSocket:
+def wrap_socket(sock: builtin_socket.socket) -> AsyncSocket:
     """
     Wraps a standard socket into an async socket
     """
 
     return AsyncSocket(sock)
+
+
+def socket(*args, **kwargs):
+    """
+    Creates a new giambio socket, taking in the same positional and
+    keyword arguments as the standard library's socket.socket
+    constructor
+    """
+
+    return AsyncSocket(builtin_socket.socket(*args, **kwargs))
+

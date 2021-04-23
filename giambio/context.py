@@ -23,22 +23,19 @@ from typing import List
 
 class TaskManager:
     """
-    An asynchronous context manager for giambio
+    An asynchronous context manager for giambio, similar to trio's nurseries
 
-    :param loop: The event loop bound to this pool. Most of the times
-    it's the return value from giambio.get_event_loop()
-    :type loop: :class: AsyncScheduler
     :param timeout: The pool's timeout length in seconds, if any, defaults to None
     :type timeout: float, optional
     """
 
-    def __init__(self, loop: "giambio.core.AsyncScheduler", timeout: float = None) -> None:
+    def __init__(self, timeout: float = None) -> None:
         """
         Object constructor
         """
 
         # The event loop associated with this pool
-        self.loop: "giambio.core.AsyncScheduler" = loop
+        self.loop: giambio.core.AsyncScheduler = giambio.get_event_loop()
         # All the tasks that belong to this pool
         self.tasks: List[giambio.objects.Task] = []
         # Whether we have been cancelled or not
@@ -85,7 +82,6 @@ class TaskManager:
     async def __aenter__(self):
         """
         Implements the asynchronous context manager interface,
-        marking the pool as started and returning itself
         """
 
         return self

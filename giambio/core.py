@@ -142,6 +142,13 @@ class AsyncScheduler:
                     # Then we try to awake event-waiting tasks
                     if self.events:
                         self.check_events()
+                if self.current_pool and self.current_pool.timeout and not self.current_pool.timed_out:
+                    # Stores deadlines for tasks (deadlines are pool-specific).
+                    # The deadlines queue will internally make sure not to store
+                    # a deadline for the same pool twice. This makes the timeouts
+                    # model less flexible, because one can't change the timeout
+                    # after it is set, but it makes the implementation easier.
+                    self.deadlines.put(self.current_pool)
                 # Otherwise, while there are tasks ready to run, we run them!
                 while self.tasks:
                     # Sets the currently running task
@@ -151,13 +158,6 @@ class AsyncScheduler:
                         # we still need to make sure we don't try to execute
                         # exited tasks that are on the running queue
                         continue
-                    if self.current_pool and self.current_pool.timeout and not self.current_pool.timed_out:
-                        # Stores deadlines for tasks (deadlines are pool-specific).
-                        # The deadlines queue will internally make sure not to store
-                        # a deadline for the same pool twice. This makes the timeouts
-                        # model less flexible, because one can't change the timeout
-                        # after it is set, but it makes the implementation easier.
-                        self.deadlines.put(self.current_pool)
                     self.debugger.before_task_step(self.current_task)
                     if self.current_task.cancel_pending:
                         # We perform the deferred cancellation
@@ -244,12 +244,8 @@ class AsyncScheduler:
         while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
             pool.timed_out = True
-            self.cancel_pool(pool)
-            # Since we already know that exceptions will behave correctly
-            # (heck, half of the code in here only serves that purpose)
-            # all we do here is just raise an exception as if the current
-            # task raised it and let our machinery deal with the rest
-            raise TooSlowError()
+            if not self.current_task.done():
+                self.current_task.throw(TooSlowError())
 
     def check_events(self):
         """
@@ -393,8 +389,9 @@ class AsyncScheduler:
         Yields all tasks currently waiting on I/O resources
         """
 
-        for k in self.selector.get_map().values():
-            yield k.data
+        if self.selector.get_map():
+            for k in self.selector.get_map().values():
+                yield k.data
 
     def get_all_tasks(self) -> chain:
         """
@@ -407,7 +404,8 @@ class AsyncScheduler:
         return chain(self.tasks,
                      self.get_asleep_tasks(),
                      self.get_event_tasks(),
-                     self.get_io_tasks())
+                     self.get_io_tasks(),
+                     [self.current_task])
 
     def ensure_discard(self, task: Task):
         """
@@ -472,12 +470,13 @@ class AsyncScheduler:
                 # occur
                 self.tasks.append(t)
 
+    # noinspection PyMethodMayBeStatic
     def is_pool_done(self, pool: TaskManager) -> bool:
         """
         Returns true if the given pool has finished
         running and can be safely terminated
 
-        :return: Whether the pool and any enclosing pools finished running
+        :return: Whether the pool finished running
         :rtype:  bool
         """
 
@@ -646,79 +645,6 @@ class AsyncScheduler:
             except KeyError:
                 # The socket is already registered doing something else
                 raise ResourceBusy("The given socket is being read/written by another task") from None
-
-    # noinspection PyMethodMayBeStatic
-    async def read_sock(self, sock: socket.socket, buffer: int):
-        """
-        Reads from a socket asynchronously, waiting until the resource is
-        available and returning up to buffer bytes from the socket
-
-        :param sock: The socket that must be read
-        :type sock: socket.socket
-        :param buffer: The maximum amount of bytes that will be read
-        :type buffer: int
-        """
-
-        await want_read(sock)
-        return sock.recv(buffer)
-
-    # noinspection PyMethodMayBeStatic
-    async def accept_sock(self, sock: socket.socket):
-        """
-        Accepts a socket connection asynchronously, waiting until the resource
-        is available and returning the result of the sock.accept() call
-
-        :param sock: The socket that must be accepted
-        :type sock: socket.socket
-        """
-
-        await want_read(sock)
-        try:
-            return sock.accept()
-        except BlockingIOError:
-            # Some platforms (namely OSX systems) act weird and handle
-            # the errno 35 signal (EAGAIN) for sockets in a weird manner,
-            # and this seems to fix the issue. Not sure about why since we
-            # already called want_read above, but it ain't stupid if it works I guess
-            await want_read(sock)
-            return sock.accept()
-
-    # noinspection PyMethodMayBeStatic
-    async def sock_sendall(self, sock: socket.socket, data: bytes):
-        """
-        Sends all the passed bytes trough the given socket, asynchronously
-
-        :param sock: The socket that must be written
-        :type sock: socket.socket
-        :param data: The bytes to send across the socket
-        :type data: bytes
-        """
-
-        while data:
-            await want_write(sock)
-            try:
-                sent_no = sock.send(data)
-            except BlockingIOError:
-                await want_write(sock)
-                sent_no = sock.send(data)
-            data = data[sent_no:]
-
-    async def close_sock(self, sock: socket.socket):
-        """
-        Closes the given socket asynchronously
-
-        :param sock: The socket that must be closed
-        :type sock: socket.socket
-        """
-
-        await want_write(sock)
-        try:
-            sock.close()
-        except BlockingIOError:
-            await want_write(sock)
-            sock.close()
-        self.selector.unregister(sock)
-        self.current_task.last_io = ()
 
     # noinspection PyMethodMayBeStatic
     async def connect_sock(self, sock: socket.socket, address_tuple: tuple):

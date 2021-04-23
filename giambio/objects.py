@@ -203,8 +203,8 @@ class TimeQueue:
         or -1 if it is not present
         """
 
-        for i in self.container:
-            if i[2] == item:
+        for i, e in enumerate(self.container):
+            if e[2] == item:
                 return i
         return -1
 
@@ -222,8 +222,8 @@ class TimeQueue:
         """
 
         idx = self.index(item)
-        if idx != 1:
-            self.container.remove(idx)
+        if idx != -1:
+            self.container.pop(idx)
             heapify(self.container)
 
     def get_closest_deadline(self) -> float:
@@ -333,8 +333,8 @@ class DeadlinesQueue:
         or -1 if it is not present
         """
 
-        for i in self.container:
-            if i[2] == item:
+        for i, e in enumerate(self.container):
+            if e[2] == item:
                 return i
         return -1
 
@@ -353,7 +353,7 @@ class DeadlinesQueue:
 
         idx = self.index(item)
         if idx != 1:
-            self.container.remove(idx)
+            self.container.pop(idx)
             heapify(self.container)
 
     def get_closest_deadline(self) -> float:

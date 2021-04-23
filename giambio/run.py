@@ -91,7 +91,7 @@ def create_pool():
     """
 
     loop = get_event_loop()
-    pool = TaskManager(loop)
+    pool = TaskManager()
     loop.current_pool = pool
     return pool
 
@@ -102,6 +102,9 @@ def with_timeout(timeout: int or float):
     """
 
     loop = get_event_loop()
-    pool = TaskManager(loop, timeout)
+    # We add 1 to make the timeout intuitive and inclusive (i.e.
+    # a 10 seconds timeout means the task is allowed to run 10
+    # whole seconds instead of cancelling at the tenth second)
+    pool = TaskManager(timeout + 1)
     loop.current_pool = pool
     return pool

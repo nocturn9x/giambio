@@ -1,7 +1,5 @@
 import giambio
 from giambio.socket import AsyncSocket
-from debugger import Debugger
-import socket
 import logging
 import sys
 
@@ -16,14 +14,13 @@ async def serve(bind_address: tuple):
     (address, port) where address is a string and port is an integer
     """
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(bind_address)
-    sock.listen(5)
-    async_sock = giambio.wrap_socket(sock)   # We make the socket an async socket
+    sock = giambio.socket.socket()
+    await sock.bind(bind_address)
+    await sock.listen(5)
     logging.info(f"Serving asynchronously at {bind_address[0]}:{bind_address[1]}")
     async with giambio.create_pool() as pool:
         while True:
-            conn, address_tuple = await async_sock.accept()
+            conn, address_tuple = await sock.accept()
             logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
             pool.spawn(handler, conn, address_tuple)
 
@@ -61,7 +58,7 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 1501
     logging.basicConfig(level=20, format="[%(levelname)s] %(asctime)s %(message)s", datefmt="%d/%m/%Y %p")
     try:
-        giambio.run(serve, ("localhost", port), debugger=None)
+        giambio.run(serve, ("localhost", port))
     except (Exception, KeyboardInterrupt) as error:  # Exceptions propagate!
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")
