@@ -181,14 +181,16 @@ class AsyncScheduler:
                     if self.to_send and self.current_task != "init":
                         self.to_send = None
                     # Sneaky method call, thanks to David Beazley for this ;)
+                    if not hasattr(self, method):
+                        # If this happens, that's quite bad!
+                        # This if block is meant to be triggered by other async
+                        # libraries, which most likely have different trap names and behaviors
+                        # compared to us. If you get this exception and you're 100% sure you're
+                        # not mixing async primitives from other libraries, then it's a bug!
+                        raise InternalError("Uh oh! Something very bad just happened, did"
+                                            " you try to mix primitives from other async libraries?") from None
+
                     getattr(self, method)(*args)
-            except AttributeError:  # If this happens, that's quite bad!
-                # This exception block is meant to be triggered by other async
-                # libraries, which most likely have different trap names and behaviors
-                # compared to us. If you get this exception and you're 100% sure you're
-                # not mixing async primitives from other libraries, then it's a bug!
-                raise InternalError("Uh oh! Something very bad just happened, did"
-                                    " you try to mix primitives from other async libraries?") from None
             except StopIteration as ret:
                 # At the end of the day, coroutines are generator functions with
                 # some tricky behaviors, and this is one of them. When a coroutine
