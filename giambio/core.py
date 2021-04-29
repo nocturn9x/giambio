@@ -18,7 +18,6 @@ limitations under the License.
 
 # Import libraries and internal resources
 import types
-import socket
 from itertools import chain
 from timeit import default_timer
 from giambio.context import TaskManager
@@ -34,8 +33,6 @@ from giambio.exceptions import (InternalError,
                                 TooSlowError
                                 )
 
-# TODO: Take into account SSLWantReadError and SSLWantWriteError
-IOInterrupt = (BlockingIOError, InterruptedError)
 # TODO: Right now this value is pretty much arbitrary, we need some testing to choose a sensible default
 IO_SKIP_LIMIT = 5
 

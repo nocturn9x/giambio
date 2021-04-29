@@ -20,6 +20,9 @@ from giambio.run import get_event_loop
 from giambio.exceptions import ResourceClosed
 from giambio.traps import want_write, want_read
 
+# TODO: Take into account SSLWantReadError and SSLWantWriteError
+IOInterrupt = (BlockingIOError, InterruptedError)
+
 
 class AsyncSocket:
     """
@@ -43,7 +46,7 @@ class AsyncSocket:
         await want_read(self.sock)
         try:
             return self.sock.recv(max_size)
-        except BlockingIOError:
+        except IOInterrupt:
             await want_read(self.sock)
         return self.sock.recv(max_size)
 
@@ -57,7 +60,7 @@ class AsyncSocket:
         await want_read(self.sock)
         try:
             to_wrap = self.sock.accept()
-        except BlockingIOError:
+        except IOInterrupt:
             # Some platforms (namely OSX systems) act weird and handle
             # the errno 35 signal (EAGAIN) for sockets in a weird manner,
             # and this seems to fix the issue. Not sure about why since we
@@ -77,7 +80,7 @@ class AsyncSocket:
             await want_write(self.sock)
             try:
                 sent_no = self.sock.send(data)
-            except BlockingIOError:
+            except IOInterrupt:
                 await want_write(self.sock)
                 sent_no = self.sock.send(data)
             data = data[sent_no:]
@@ -92,7 +95,7 @@ class AsyncSocket:
         await want_write(self.sock)
         try:
             self.sock.close()
-        except BlockingIOError:
+        except IOInterrupt:
             await want_write(self.sock)
             self.sock.close()
         self.loop.selector.unregister(self.sock)
@@ -109,7 +112,7 @@ class AsyncSocket:
         await want_write(self.sock)
         try:
             self.sock.connect(addr)
-        except BlockingIOError:
+        except IOInterrupt:
             await want_write(self.sock)
             self.sock.connect(addr)
 
