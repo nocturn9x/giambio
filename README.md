@@ -176,8 +176,8 @@ The reason for this is that while giambio tries to separate the async and sync w
 - It creates this weird coroutine object
 - Passes that object to `await`, which runs the function
 
-This is due to the fact that people started writing asynchronous Python code _before_ the `async`/`await` syntax was added
-so many libraries (like asyncio), had to figure out some clever hacks to make it work without native support from the language
+This is due to the fact that people started writing asynchronous Python code _before_ the `async`/`await` syntax was added, 
+so many libraries (like asyncio) had to figure out some clever hacks to make it work without native support from the language
 itself, taking advantage of generator functions (we'll talk about those later on), and coroutines are heavily based on generators.
 
 
@@ -604,7 +604,7 @@ This is where clients will be dispatched once they connect:
     (or any size in that range) depending on your OS buffers and network congestion
 - We do a little check here: if what we receive is an empty message, then our client is gone and we can exit the loop
 - Since I want to show off giambio's exception handling, I added a little if condition that will raise an exception if a client
-    sends us a message with "exit" as content: this will propagate the task in our `serve` function and kill all children tasks
+    sends us a message with "exit" as content: this will propagate the exception in our `serve` function and kill all children tasks
 - Here comes the "echo" part of "echo server": We log the message to the screen and then send the same data back to our client
 
 Finally, some startup code:
@@ -683,7 +683,7 @@ Save this into a file and try running it, you should see something along the lin
 ```
 Yay! Our echo server is running, let's test it out by using the netcat terminal utility:
 ```
-user@hostname:~ # nc localhost 1501
+user@hostname:~ # nc localhost 1500
 Welcome to the server pal, feel free to send me something!
 -> async server test
 Got: async server test
