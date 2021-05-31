@@ -599,7 +599,7 @@ class AsyncScheduler:
         # Since we don't reschedule the task, it will
         # not execute until check_events is called
 
-    def register_sock(self, sock: socket.socket, evt_type: str):
+    def register_sock(self, sock, evt_type: str):
         """
         Registers the given socket inside the
         selector to perform I/0 multiplexing
@@ -611,6 +611,7 @@ class AsyncScheduler:
         socket, either "read" or "write"
         :type evt_type: str
         """
+
 
         self.current_task.status = "io"
         evt = EVENT_READ if evt_type == "read" else EVENT_WRITE
@@ -635,8 +636,9 @@ class AsyncScheduler:
                 # If the event to listen for has changed we just modify it
                 self.selector.modify(sock, evt, self.current_task)
                 self.current_task.last_io = (evt_type, sock)
-        else:
-            # Otherwise we register the new socket in our selector
+        elif not self.current_task.last_io or self.current_task.last_io[1] != sock:
+            # The task has either registered a new socket or is doing
+            # I/O for the first time. In both cases, we register a new socket
             self.current_task.last_io = evt_type, sock
             try:
                 self.selector.register(sock, evt, self.current_task)

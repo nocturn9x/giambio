@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import ssl
 import socket as builtin_socket
 from giambio.run import get_event_loop
 from giambio.exceptions import ResourceClosed
@@ -29,7 +30,7 @@ class AsyncSocket:
     Abstraction layer for asynchronous sockets
     """
 
-    def __init__(self, sock: builtin_socket.socket):
+    def __init__(self, sock):
         self.sock = sock
         self.loop = get_event_loop()
         self._closed = False
@@ -43,6 +44,9 @@ class AsyncSocket:
         if self._closed:
             raise ResourceClosed("I/O operation on closed socket")
         assert max_size >= 1, "max_size must be >= 1"
+        if isinstance(self.sock, ssl.SSLSocket) and self.sock.pending():
+            print(self.sock.pending())
+            return self.sock.recv(self.sock.pending())
         await want_read(self.sock)
         try:
             return self.sock.recv(max_size)
@@ -112,9 +116,8 @@ class AsyncSocket:
         await want_write(self.sock)
         try:
             self.sock.connect(addr)
-        except IOInterrupt:
+        except IOInterrupt as io_interrupt:
             await want_write(self.sock)
-            self.sock.connect(addr)
 
     async def bind(self, addr: tuple):
         """
@@ -132,7 +135,7 @@ class AsyncSocket:
         """
         Starts listening with the given backlog
 
-        :param backlog: The address, port tuple to bind to
+        :param backlog: The socket's backlog
         :type backlog: int
         """
 
@@ -151,6 +154,8 @@ class AsyncSocket:
 
         if not self._closed and self.loop.selector.get_map() and self.sock in self.loop.selector.get_map():
             self.loop.selector.unregister(self.sock)
+            self.loop.current_task.last_io = ()
+            self._closed = True
 
     async def __aenter__(self):
         return self
