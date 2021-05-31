@@ -18,6 +18,7 @@ limitations under the License.
 
 # Import libraries and internal resources
 import types
+import socket
 from itertools import chain
 from timeit import default_timer
 from giambio.context import TaskManager

@@ -19,9 +19,9 @@ import socket as builtin_socket
 from giambio.run import get_event_loop
 from giambio.exceptions import ResourceClosed
 from giambio.traps import want_write, want_read
+from ssl import SSLWantReadError, SSLWantWriteError
 
-# TODO: Take into account SSLWantReadError and SSLWantWriteError
-IOInterrupt = (BlockingIOError, InterruptedError)
+IOInterrupt = (BlockingIOError, InterruptedError, SSLWantReadError, SSLWantWriteError)
 
 
 class AsyncSocket:
