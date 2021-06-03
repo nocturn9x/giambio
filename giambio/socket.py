@@ -16,13 +16,18 @@ limitations under the License.
 """
 
 import ssl
+from socket import SOL_SOCKET, SO_ERROR
 import socket as builtin_socket
-from giambio.run import get_event_loop
 from giambio.exceptions import ResourceClosed
 from giambio.traps import want_write, want_read
-from ssl import SSLWantReadError, SSLWantWriteError
 
-IOInterrupt = (BlockingIOError, InterruptedError, SSLWantReadError, SSLWantWriteError)
+try:
+    from ssl import SSLWantReadError, SSLWantWriteError
+    WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
+    WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
+except ImportError:
+    WantRead = (BlockingIOError, InterruptedError)
+    WantWrite = (BlockingIOError, InterruptedError)
 
 
 class AsyncSocket:
@@ -32,61 +37,55 @@ class AsyncSocket:
 
     def __init__(self, sock):
         self.sock = sock
-        self.loop = get_event_loop()
-        self._closed = False
+        self._fd = sock.fileno()
         self.sock.setblocking(False)
 
-    async def receive(self, max_size: int):
+
+    async def receive(self, max_size: int, flags: int = 0) -> bytes:
         """
         Receives up to max_size bytes from a socket asynchronously
         """
 
-        if self._closed:
-            raise ResourceClosed("I/O operation on closed socket")
         assert max_size >= 1, "max_size must be >= 1"
-        if isinstance(self.sock, ssl.SSLSocket) and self.sock.pending():
-            print(self.sock.pending())
-            return self.sock.recv(self.sock.pending())
-        await want_read(self.sock)
-        try:
-            return self.sock.recv(max_size)
-        except IOInterrupt:
-            await want_read(self.sock)
-        return self.sock.recv(max_size)
+        data = b""
+        if self._fd == -1:
+            raise ResourceClosed("I/O operation on closed socket")
+        while True:
+            try:
+                return self.sock.recv(max_size, flags)
+            except WantRead:
+                await want_read(self.sock)
+            except WantWrite:
+                await want_write(self.sock)
 
     async def accept(self):
         """
         Accepts the socket, completing the 3-step TCP handshake asynchronously
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
-        await want_read(self.sock)
-        try:
-            to_wrap = self.sock.accept()
-        except IOInterrupt:
-            # Some platforms (namely OSX systems) act weird and handle
-            # the errno 35 signal (EAGAIN) for sockets in a weird manner,
-            # and this seems to fix the issue. Not sure about why since we
-            # already called want_read above, but it ain't stupid if it works I guess
-            await want_read(self.sock)
-            to_wrap = self.sock.accept()
-        return wrap_socket(to_wrap[0]), to_wrap[1]
+        while True:
+            try:
+                remote, addr = self.sock.accept()
+                return wrap_socket(remote), addr
+            except WantRead:
+                await want_read(self.sock)
 
-    async def send_all(self, data: bytes):
+    async def send_all(self, data: bytes, flags: int = 0):
         """
         Sends all data inside the buffer asynchronously until it is empty
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
         while data:
-            await want_write(self.sock)
             try:
-                sent_no = self.sock.send(data)
-            except IOInterrupt:
+                sent_no = self.sock.send(data, flags)
+            except WantRead:
+                await want_read(self.sock)
+            except WantWrite:
                 await want_write(self.sock)
-                sent_no = self.sock.send(data)
             data = data[sent_no:]
 
     async def close(self):
@@ -94,30 +93,26 @@ class AsyncSocket:
         Closes the socket asynchronously
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
-        await want_write(self.sock)
-        try:
-            self.sock.close()
-        except IOInterrupt:
-            await want_write(self.sock)
-            self.sock.close()
-        self.loop.selector.unregister(self.sock)
-        self.loop.current_task.last_io = ()
-        self._closed = True
+        await release_sock(self.sock)
+        self.sock.close()
+        self._sock = None
+        self.sock = -1
 
     async def connect(self, addr: tuple):
         """
         Connects the socket to an endpoint
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
-        await want_write(self.sock)
         try:
             self.sock.connect(addr)
-        except IOInterrupt as io_interrupt:
+        except WantWrite:
             await want_write(self.sock)
+        self.sock.connect(addr)
+
 
     async def bind(self, addr: tuple):
         """
@@ -127,7 +122,7 @@ class AsyncSocket:
         :type addr: tuple
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
         self.sock.bind(addr)
 
@@ -139,29 +134,88 @@ class AsyncSocket:
         :type backlog: int
         """
 
-        if self._closed:
+        if self.sock == -1:
             raise ResourceClosed("I/O operation on closed socket")
         self.sock.listen(backlog)
 
-    def __del__(self):
-        """
-        Implements the destructor for the async socket,
-        notifying the event loop that the socket must not
-        be listened for anymore. This avoids the loop
-        blocking forever on trying to read from a socket
-        that's gone out of scope without being closed
-        """
-
-        if not self._closed and self.loop.selector.get_map() and self.sock in self.loop.selector.get_map():
-            self.loop.selector.unregister(self.sock)
-            self.loop.current_task.last_io = ()
-            self._closed = True
-
     async def __aenter__(self):
+        self.sock.__enter__()
         return self
 
-    async def __aexit__(self, *_):
-        await self.close()
+    async def __aexit__(self, *args):
+        if self.sock:
+            self.sock.__exit__(*args)
+
+    # Yes, I stole these from Curio because I could not be
+    # arsed to write a bunch of uninteresting simple socket
+    # methods from scratch, deal with it.
+
+    async def connect(self, address):
+        try:
+            result = self.sock.connect(address)
+            if getattr(self, 'do_handshake_on_connect', False):
+                await self.do_handshake()
+            return result
+        except WantWrite:
+            await want_write(self.sock)
+        err = self.sock.getsockopt(SOL_SOCKET, SO_ERROR)
+        if err != 0:
+            raise OSError(err, f'Connect call failed {address}')
+        if getattr(self, 'do_handshake_on_connect', False):
+            await self.do_handshake()
+
+    async def recvfrom(self, buffersize, flags=0):
+        while True:
+            try:
+                return self.sock.recvfrom(buffersize, flags)
+            except WantRead:
+                await want_read(self.sock)
+            except WantWrite:
+                await want_write(self.sock)
+
+    async def recvfrom_into(self, buffer, bytes=0, flags=0):
+        while True:
+            try:
+                return self.sock.recvfrom_into(buffer, bytes, flags)
+            except WantRead:
+                await want_read(self.sock)
+            except WantWrite:
+                await want_write(self.sock)
+
+    async def sendto(self, bytes, flags_or_address, address=None):
+        if address:
+            flags = flags_or_address
+        else:
+            address = flags_or_address
+            flags = 0
+        while True:
+            try:
+                return self.sock.sendto(bytes, flags, address)
+            except WantWrite:
+                await want_write(self.sock)
+            except WantRead:
+                await want_read(self.sock)
+
+    async def recvmsg(self, bufsize, ancbufsize=0, flags=0):
+        while True:
+            try:
+                return self.sock.recvmsg(bufsize, ancbufsize, flags)
+            except WantRead:
+                await want_read(self.sock)
+
+    async def recvmsg_into(self, buffers, ancbufsize=0, flags=0):
+        while True:
+            try:
+                return self.sock.recvmsg_into(buffers, ancbufsize, flags)
+            except WantRead:
+                await want_read(self.sock)
+
+    async def sendmsg(self, buffers, ancdata=(), flags=0, address=None):
+        while True:
+            try:
+                return self.sock.sendmsg(buffers, ancdata, flags, address)
+            except WantRead:
+                await want_write(self.sock)
 
     def __repr__(self):
         return f"giambio.socket.AsyncSocket({self.sock}, {self.loop})"

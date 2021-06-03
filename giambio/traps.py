@@ -38,14 +38,15 @@ def create_trap(method, *args):
 
 async def sleep(seconds: int):
     """
-    Pause the execution of an async function for a given amount of seconds,
-    without blocking the entire event loop, which keeps watching for other events.
+    Pause the execution of an async function for a given amount of seconds.
+    This function is functionally equivalent to time.sleep, but can be used
+    within async code without blocking everything else.
 
     This function is also useful as a sort of checkpoint, because it returns
     control to the scheduler, which can then switch to another task. If your code
     doesn't have enough calls to async functions (or 'checkpoints') this might
     prevent the scheduler from switching tasks properly. If you feel like this
-    happens in your code, try adding a call to giambio.sleep(0) somewhere.
+    happens in your code, try adding a call to await giambio.sleep(0) somewhere.
     This will act as a checkpoint without actually pausing the execution
     of your function, but it will allow the scheduler to switch tasks
 
@@ -55,6 +56,16 @@ async def sleep(seconds: int):
 
     assert seconds >= 0, "The time delay can't be negative"
     await create_trap("sleep", seconds)
+
+
+async def io_release(resource):
+    """
+    Notifies the event loop to release
+    the resources associated to the given
+    socket and stop listening on it
+    """
+
+    await create_trap("io_release", resource)
 
 
 async def current_task():

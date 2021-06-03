@@ -10,21 +10,62 @@ production ready, so be aware that it is likely (if not guaranteed)  that you'll
 
 # Disclaimer
 
-Right now this is nothing more than a toy implementation to help me understand how this whole `async`/`await` thing works
-and it is pretty much guaranteed to explode spectacularly badly while using it. If you find any bugs, please report them!
-
 This project was hugely inspired by the [curio](https://github.com/dabeaz/curio) and the
 [trio](https://github.com/python-trio/trio) projects, you might want to have a look at their amazing work if you need a
 rock-solid and structured concurrency framework (I personally recommend trio and that's definitely not related to the fact
 that most of the content of this document is ~~stolen~~ inspired from its documentation)
 
 
+## Goals of this project
+
+Making yet another async library might sound dumb in an already fragmented ecosystem like Python's.
+In fact, giambio was initially born as a fun toy project to help me understand how this whole async/await magic actually worked, but while I researched this topic
+further I found some issues with the current async ecosystem in Python.
+As of the time of writing, the ecosystem for async libraries is divided as follows:
+    - Asyncio. Since it's in the stdlib, it sets a standard all of its own
+    - Tornado/Gevent/other old frameworks (based partly on asyncio or not)
+    - Modern, post PEP 492 frameworks like curio and trio
+
+The main issue with asyncio is too complex to explain here in detail, but in short
+it boils down to the fact that it is an old library which was not designed to take advantage
+of the new async/await features natively and uses callbacks instead. There is a compatibility
+layer to use async/await, but that only causes more problems because it still runs on top of the legacy
+callback-based code (and it can't be used always, anyway). Asyncio has also a bunch
+of problems with exception propagation and cancellation, which is an issue shared
+by other old libraries like tornado and gevent.
+
+To address this problem, libraries like trio and curio were born, implementing a new
+paradigm called _Structured Concurrency_, which makes the async model much easier to use and
+reason about. The two main players in this space are trio and curio.
+
+Trio is an amazing library, probably the most advanced I've ever used, but for this exact
+reason it has 2 main issues:
+- The code is extremely intimidating to look at (without needing to be, read below)
+- It has a lot, and I mean a LOT, of layers of indirections and fancy features that are useful, but also slow down execution
+
+
+Curio has its own set of issues, namely:
+- It allows orphaned tasks (i.e. tasks not spawned trough a `curio.TaskPool`), so it partially breaks structured concurrency
+- It is not a community project, sadly
+- Big chunks of code are completely undocumented: curio's loop is basically a black box to external code (and that's a design choice)
+
+What I did love about curio though, is that its code is understandable once you go down the "writing an async scheduler" rabbithole, and it is in
+fact my main source of ispiration for writing giambio as of now. Curio is also around 2 times faster than both trio and asyncio, according to benchmarks.
+
+Giambio means to take the best of all of its predecessors, while being:
+- Fully documented and type hinted for 100% editor coverage
+- Small, but featureful 
+- Fast, possibly as fast as curio, if not better
+- Dependency-free: No fancy C modules, no external libraries, just pure idiomatic Python code
+- Community-based: I frankly wouldn't have bothered making this if curio was open to community additions
+
 ## Current limitations
 
-As I already mentioned, giambio is **highly** experimental and there's a lot to work to do before it's usable. Namely:
+giambio is **highly** experimental and there's a lot to work to do before it's usable. Namely:
 - Ensure cancellations work 100% of the time even when `await`ing functions and not spawning them
 - Extend I/O functionality
-- Add task synchronization primitives such as locks and semaphores (events *sort of* work now)
+- Add other task synchronization primitives such as locks and semaphores
+- Documentation
 
 # What the hell is async anyway?
 

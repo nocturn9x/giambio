@@ -51,8 +51,10 @@ class Task:
     # time by the event loop, internally. Possible values for this are "init"--
     # when the task has been created but not started running yet--, "run"-- when
     # the task is running synchronous code--, "io"-- when the task is waiting on
-    # an I/O resource--, "sleep"-- when the task is either asleep or waiting on an event
-    # and "crashed"-- when the task has exited because of an exception
+    # an I/O resource--, "sleep"-- when the task is either asleep or waiting on
+    # an event, "crashed"-- when the task has exited because of an exception
+    # and "cancelled" when-- when the task has been explicitly cancelled with
+    # its cancel() method or as a result of an exception
     status: str = "init"
     # This attribute counts how many times the task's run() method has been called
     steps: int = 0
@@ -130,6 +132,17 @@ class Task:
 
         return self.exc or self.finished or self.cancelled
 
+    def __del__(self):
+        """
+        Task destructor
+        """
+
+        try:
+            self.coroutine.close()
+        except RuntimeError:
+            pass   # TODO: This is kinda bad
+        assert not self.last_io
+
 
 class Event:
     """
@@ -143,7 +156,6 @@ class Event:
 
         self.set = False
         self.waiters = []
-        self.event_caught = False
 
     async def trigger(self):
         """
@@ -169,8 +181,8 @@ class TimeQueue:
     sleeping tasks will be put when they are not running
 
     :param clock: The same monotonic clock that was passed to the thread-local event loop.
-    It is important for the queue to be synchronized with the loop as this allows
-    the sleeping mechanism to work reliably
+        It is important for the queue to be synchronized with the loop as this allows
+       the sleeping mechanism to work reliably
     """
 
     def __init__(self, clock):
