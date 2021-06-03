@@ -22,9 +22,9 @@ Making yet another async library might sound dumb in an already fragmented ecosy
 In fact, giambio was initially born as a fun toy project to help me understand how this whole async/await magic actually worked, but while I researched this topic
 further I found some issues with the current async ecosystem in Python.
 As of the time of writing, the ecosystem for async libraries is divided as follows:
-    - Asyncio. Since it's in the stdlib, it sets a standard all of its own
-    - Tornado/Gevent/other old frameworks (based partly on asyncio or not)
-    - Modern, post PEP 492 frameworks like curio and trio
+- Asyncio. Since it's in the stdlib, it sets a standard all of its own
+- Tornado/Gevent/other old frameworks (based partly on asyncio or not)
+- Modern, post PEP 492 frameworks like curio and trio
 
 The main issue with asyncio is too complex to explain here in detail, but in short
 it boils down to the fact that it is an old library which was not designed to take advantage
