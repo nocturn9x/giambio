@@ -34,7 +34,7 @@ callback-based code (and it can't be used always, anyway). Asyncio has also a bu
 of problems with exception propagation and cancellation, which is an issue shared
 by other old libraries like tornado and gevent.
 
-To address this problem, libraries like trio and curio were born, implementing a new
+To address this problem, a couple of very smart people came up with a new
 paradigm called _Structured Concurrency_, which makes the async model much easier to use and
 reason about. The two main players in this space are trio and curio.
 
