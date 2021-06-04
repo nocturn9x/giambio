@@ -45,7 +45,7 @@ reason it has 2 main issues:
 
 
 Curio has its own set of issues, namely:
-- It allows orphaned tasks (i.e. tasks not spawned trough a `curio.TaskPool`), so it partially breaks structured concurrency
+- It allows orphaned tasks (i.e. tasks not spawned trough a `curio.TaskGroup`), so it partially breaks structured concurrency
 - It is not a community project, sadly
 - Big chunks of code are completely undocumented: curio's loop is basically a black box to external code (and that's a design choice)
 
