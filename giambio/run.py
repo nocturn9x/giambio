@@ -68,8 +68,10 @@ def run(func: FunctionType, *args, **kwargs):
     """
 
     if inspect.iscoroutine(func):
-        raise GiambioError("Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
-                           "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)")
+        raise GiambioError(
+            "Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
+            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)"
+        )
     elif not inspect.iscoroutinefunction(func):
         raise GiambioError("giambio.run() requires an async function as parameter!")
     new_event_loop(kwargs.get("debugger", None), kwargs.get("clock", default_timer))

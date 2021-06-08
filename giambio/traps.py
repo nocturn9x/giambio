@@ -22,6 +22,11 @@ limitations under the License.
 
 
 import types
+import inspect
+from giambio.task import Task
+from types import FunctionType
+from typing import List, Union, Iterable
+from giambio.exceptions import GiambioError
 
 
 @types.coroutine
@@ -36,7 +41,27 @@ def create_trap(method, *args):
     return data
 
 
-async def sleep(seconds: int):
+async def create_task(coro: FunctionType, *args):
+    """
+    Spawns a new task in the current event loop from a bare coroutine
+    function. All extra positional arguments are passed to the function
+
+    This trap should *NOT* be used on its own, it is meant to be
+    called from internal giambio machinery
+    """
+
+    if inspect.iscoroutine(coro):
+        raise GiambioError(
+            "Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
+            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)"
+        )
+    elif inspect.iscoroutinefunction(coro):
+        return await create_trap("create_task", coro, *args)
+    else:
+        raise TypeError("coro must be a coroutine or coroutine function")
+
+
+async def sleep(seconds: Union[int, float]):
     """
     Pause the execution of an async function for a given amount of seconds.
     This function is functionally equivalent to time.sleep, but can be used
@@ -73,7 +98,23 @@ async def current_task():
     Gets the currently running task in an asynchronous fashion
     """
 
-    return await create_trap("get_current")
+    return await create_trap("get_current_task")
+
+
+async def current_loop():
+    """
+    Gets the currently running loop in an asynchronous fashion
+    """
+
+    return await create_trap("get_current_loop")
+
+
+async def current_pool():
+    """
+    Gets the currently active task pool in an asynchronous fashion
+    """
+
+    return await create_trap("get_current_pool")
 
 
 async def join(task):
@@ -126,16 +167,6 @@ async def want_write(stream):
     await create_trap("register_sock", stream, "write")
 
 
-async def event_set(event):
-    """
-    Communicates to the loop that the given event object
-    must be set. This is important as the loop constantly
-    checks for active events to deliver them
-    """
-
-    await create_trap("event_set", event)
-
-
 async def event_wait(event):
     """
     Notifies the event loop that the current task has to wait
@@ -145,5 +176,32 @@ async def event_wait(event):
 
     if event.set:
         return
-    await create_trap("event_wait", event)
+    event.waiters.add(await current_task())
+    await create_trap("suspend")
 
+
+async def event_set(event):
+    """
+    Sets the given event and reawakens its
+    waiters
+    """
+
+    event.set = True
+    await reschedule_running()
+    await schedule_tasks(event.waiters)
+
+
+async def schedule_tasks(tasks: Iterable[Task]):
+    """
+    Schedules a list of tasks for execution
+    """
+
+    await create_trap("schedule_tasks", tasks)
+
+
+async def reschedule_running():
+    """
+    Reschedules the current task for execution
+    """
+
+    await create_trap("reschedule_running")

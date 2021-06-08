@@ -22,7 +22,7 @@ __version__ = (0, 0, 1)
 
 from . import exceptions, socket, context, core
 from .traps import sleep, current_task
-from .objects import Event
+from .sync import Event
 from .run import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout
 from .util import debug
 

@@ -99,4 +99,3 @@ class ErrorStack(GiambioError):
             else:
                 tracebacks += f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}"
         return f"Multiple errors occurred:\n{tracebacks}"
-

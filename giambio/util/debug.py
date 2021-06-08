@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from abc import ABC, abstractmethod
-from giambio.objects import Task
+from giambio.task import Task
 
 
 class BaseDebugger(ABC):

@@ -252,8 +252,8 @@ async def child1():
 async def main():
     start = giambio.clock()
     async with giambio.create_pool() as pool:
-        pool.spawn(child)
-        pool.spawn(child1)
+        await pool.spawn(child)
+        await pool.spawn(child1)
         print("[main] Children spawned, awaiting completion")
     print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
@@ -599,7 +599,7 @@ async def serve(bind_address: tuple):
         while True:
             conn, address_tuple = await sock.accept()
             logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
-            pool.spawn(handler, conn, address_tuple)
+            await pool.spawn(handler, conn, address_tuple)
 
 ```
 

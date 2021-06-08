@@ -31,19 +31,21 @@ async def main():
     start = giambio.clock()
     try:
         async with giambio.create_pool() as pool:
-            pool.spawn(child)
-            pool.spawn(child1)
+            await pool.spawn(child)
+            await pool.spawn(child1)
             print("[main] Children spawned, awaiting completion")
             async with giambio.create_pool() as new_pool:
                 # This pool will be cancelled by the exception
                 # in the other pool
-                new_pool.spawn(child2)
-                new_pool.spawn(child3)
+                await new_pool.spawn(child2)
+                await new_pool.spawn(child3)
                 print("[main] 3rd child spawned")
     except Exception as error:
         # Because exceptions just *work*!
         print(f"[main] Exception from child caught! {repr(error)}")
-    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
+    print(
+        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
+    )
 
 
 if __name__ == "__main__":

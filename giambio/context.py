@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import giambio
 import types
+import giambio
 from typing import List
 
 
@@ -50,40 +50,22 @@ class TaskManager:
             self.timeout: None = None
         # Whether our timeout expired or not
         self.timed_out: bool = False
+        self._proper_init = False
 
-    def spawn(self, func: types.FunctionType, *args) -> "giambio.objects.Task":
+    async def spawn(self, func: types.FunctionType, *args) -> "giambio.task.Task":
         """
         Spawns a child task
         """
 
-        task = giambio.objects.Task(func.__name__ or str(func), func(*args), self)
-        task.joiners = [self.loop.current_task]
-        task.next_deadline = self.timeout or 0.0
-        self.loop.tasks.append(task)
-        self.loop.debugger.on_task_spawn(task)
-        self.tasks.append(task)
-        return task
-
-    def spawn_after(self, func: types.FunctionType, n: int, *args) -> "giambio.objects.Task":
-        """
-        Schedules a task for execution after n seconds
-        """
-
-        assert n >= 0, "The time delay can't be negative"
-        task = giambio.objects.Task(func.__name__ or str(func), func(*args), self)
-        task.joiners = [self.loop.current_task]
-        task.next_deadline = self.timeout or 0.0
-        task.sleep_start = self.loop.clock()
-        self.loop.paused.put(task, n)
-        self.loop.debugger.on_task_schedule(task, n)
-        self.tasks.append(task)
-        return task
+        assert self._proper_init
+        return await giambio.traps.create_task(func, *args)
 
     async def __aenter__(self):
         """
         Implements the asynchronous context manager interface,
         """
 
+        self._proper_init = True
         return self
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
@@ -97,6 +79,7 @@ class TaskManager:
             # end of the block and wait for all
             # children to exit
             await task.join()
+        self._proper_init = False
 
     async def cancel(self):
         """
