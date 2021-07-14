@@ -468,7 +468,7 @@ class AsyncScheduler:
             self.run_ready.append(key.data)  # Resource ready? Schedule its task
         self.debugger.after_io(self.clock() - before_time)
 
-    def start(self, func: types.FunctionType, *args):
+    def start(self, func: types.FunctionType, *args, loop: bool = True):
         """
         Starts the event loop from a sync context
         """
@@ -477,9 +477,10 @@ class AsyncScheduler:
         self.tasks.append(entry)
         self.run_ready.append(entry)
         self.debugger.on_start()
-        self.run()
-        self.has_ran = True
-        self.debugger.on_exit()
+        if loop:
+            self.run()
+            self.has_ran = True
+            self.debugger.on_exit()
 
     def cancel_pool(self, pool: TaskManager) -> bool:
         """
