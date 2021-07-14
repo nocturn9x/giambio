@@ -125,9 +125,21 @@ class AsyncScheduler:
         # Data to send back to a trap
         self._data: Optional[Any] = None
         # The I/O skip limit. TODO: Back up this value with euristics
-        self.io_skip_limit = io_skip_limit
+        self.io_skip_limit = io_skip_limit or 5
         # The max. I/O timeout
         self.io_max_timeout = io_max_timeout
+
+    def __repr__(self):
+        """
+        Returns repr(self)
+        """
+
+        fields = {"debugger", "tasks", "run_ready", "selector", "current_task",
+                  "clock", "paused", "has_ran", "current_pool", "io_skip",
+                  "deadlines", "_data", "io_skip_limit", "io_max_timeout"
+                  }
+        data = ", ".join(name + "=" + str(value) for name, value in zip(fields, (getattr(self, field) for field in fields)))
+        return f"{type(self).__name__}({data})"
 
     def done(self) -> bool:
         """
@@ -144,6 +156,8 @@ class AsyncScheduler:
         """
 
         self.selector.close()
+        self.tasks = []
+        self.current_task = self.current_pool = None
         # TODO: Anything else?
 
     def run(self):
