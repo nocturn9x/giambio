@@ -15,8 +15,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
+import giambio
+from typing import List, Tuple
 from giambio.task import Task
-from heapq import heappush, heappop
+from heapq import heappush, heappop, heapify
 
 
 class TimeQueue:

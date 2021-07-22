@@ -29,9 +29,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
     """
     Handles a single client connection
 
-    :param sock: The giambio.socket.AsyncSocket object connected
-    to the client
-    :type sock: :class: giambio.socket.AsyncSocket
+    :param sock: The AsyncSocket object connected to the client
     :param client_address: The client's address represented as a tuple
     (address, port) where address is a string and port is an integer
     :type client_address: tuple
@@ -39,9 +37,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
 
     address = f"{client_address[0]}:{client_address[1]}"
     async with sock:  # Closes the socket automatically
-        await sock.send_all(
-            b"Welcome to the server pal, feel free to send me something!\n"
-        )
+        await sock.send_all(b"Welcome to the server pal, feel free to send me something!\n")
         while True:
             await sock.send_all(b"-> ")
             data = await sock.receive(1024)
@@ -49,9 +45,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
                 break
             elif data == b"exit\n":
                 await sock.send_all(b"I'm dead dude\n")
-                raise TypeError(
-                    "Oh, no, I'm gonna die!"
-                )  # This kills the entire application!
+                raise TypeError("Oh, no, I'm gonna die!")  # This kills the entire application!
             logging.info(f"Got: {data!r} from {address}")
             await sock.send_all(b"Got: " + data)
             logging.info(f"Echoed back {data!r} to {address}")

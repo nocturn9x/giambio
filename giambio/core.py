@@ -18,15 +18,11 @@ limitations under the License.
 
 # Import libraries and internal resources
 import types
-import socket
-from itertools import chain
 from giambio.task import Task
-from giambio.sync import Event
 from timeit import default_timer
 from giambio.context import TaskManager
-from typing import List, Optional, Set, Any
+from typing import List, Optional, Any
 from giambio.util.debug import BaseDebugger
-from giambio.traps import want_read, want_write
 from giambio.internal import TimeQueue, DeadlinesQueue
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from giambio.exceptions import (
@@ -105,7 +101,7 @@ class AsyncScheduler:
         # Tasks that are ready to run
         self.run_ready: List[Task] = []
         # Selector object to perform I/O multiplexing
-        self.selector: DefaultSelector = DefaultSelector()
+        self.selector = selector or DefaultSelector()
         # This will always point to the currently running coroutine (Task object)
         self.current_task: Optional[Task] = None
         # Monotonic clock to keep track of elapsed time reliably
@@ -134,11 +130,25 @@ class AsyncScheduler:
         Returns repr(self)
         """
 
-        fields = {"debugger", "tasks", "run_ready", "selector", "current_task",
-                  "clock", "paused", "has_ran", "current_pool", "io_skip",
-                  "deadlines", "_data", "io_skip_limit", "io_max_timeout"
-                  }
-        data = ", ".join(name + "=" + str(value) for name, value in zip(fields, (getattr(self, field) for field in fields)))
+        fields = {
+            "debugger",
+            "tasks",
+            "run_ready",
+            "selector",
+            "current_task",
+            "clock",
+            "paused",
+            "has_ran",
+            "current_pool",
+            "io_skip",
+            "deadlines",
+            "_data",
+            "io_skip_limit",
+            "io_max_timeout",
+        }
+        data = ", ".join(
+            name + "=" + str(value) for name, value in zip(fields, (getattr(self, field) for field in fields))
+        )
         return f"{type(self).__name__}({data})"
 
     def done(self) -> bool:
@@ -146,18 +156,16 @@ class AsyncScheduler:
         Returns True if there is no work to do
         """
 
-        if any([self.paused, self.run_ready, self.selector.get_map()]):
-            return False
-        return True
+        return not any([self.paused, self.run_ready, self.selector.get_map()])
 
     def shutdown(self):
         """
         Shuts down the event loop
         """
 
+        for task in self.tasks:
+            self.io_release_task(task)
         self.selector.close()
-        self.tasks = []
-        self.current_task = self.current_pool = None
         # TODO: Anything else?
 
     def run(self):
@@ -198,11 +206,7 @@ class AsyncScheduler:
                     if self.paused:
                         # Next we try to (re)schedule the asleep tasks
                         self.awake_sleeping()
-                if (
-                    self.current_pool
-                    and self.current_pool.timeout
-                    and not self.current_pool.timed_out
-                ):
+                if self.current_pool and self.current_pool.timeout and not self.current_pool.timed_out:
                     # Stores deadlines for tasks (deadlines are pool-specific).
                     # The deadlines queue will internally make sure not to store
                     # a deadline for the same pool twice. This makes the timeouts
@@ -232,14 +236,21 @@ class AsyncScheduler:
                 self.current_task.exc = err
                 self.join(self.current_task)
 
-    def create_task(self, coro, *args) -> Task:
+    def create_task(self, corofunc: types.FunctionType, *args, **kwargs) -> Task:
         """
-        Creates a task
+        Creates a task from a coroutine function and schedules it
+        to run. Any extra keyword or positional argument are then
+        passed to the function
+
+        :param corofunc: The coroutine function (not a coroutine!) to
+        spawn
+        :type corofunc: function
         """
 
-        task = Task(coro.__name__ or str(coro), coro(*args), self.current_pool)
+        task = Task(corofunc.__name__ or str(corofunc), corofunc(*args, **kwargs), self.current_pool)
         task.next_deadline = self.current_pool.timeout or 0.0
         task.joiners = {self.current_task}
+        self._data = task
         self.tasks.append(task)
         self.run_ready.append(task)
         self.debugger.on_task_spawn(task)
@@ -251,7 +262,7 @@ class AsyncScheduler:
         """
         Runs a single step for the current task.
         A step ends when the task awaits any of
-        giambio's primitives or async methods.
+        our primitives or async methods.
 
         Note that this method does NOT catch any
         exception arising from tasks, nor does it
@@ -278,7 +289,7 @@ class AsyncScheduler:
         # somewhere)
         method, *args = self.current_task.run(data)
         if data is self._data:
-           self._data = None
+            self._data = None
         # Some debugging and internal chatter here
         self.current_task.status = "run"
         self.current_task.steps += 1
@@ -290,8 +301,7 @@ class AsyncScheduler:
             # compared to us. If you get this exception and you're 100% sure you're
             # not mixing async primitives from other libraries, then it's a bug!
             raise InternalError(
-                "Uh oh! Something very bad just happened, did"
-                " you try to mix primitives from other async libraries?"
+                "Uh oh! Something very bad just happened, did you try to mix primitives from other async libraries?"
             ) from None
         # Sneaky method call, thanks to David Beazley for this ;)
         getattr(self, method)(*args)
@@ -320,12 +330,19 @@ class AsyncScheduler:
         if self.selector.get_map() and sock in self.selector.get_map():
             self.selector.unregister(sock)
 
-    def suspend(self):
+    def suspend(self, task: Task):
         """
-        Suspends execution of the current task
+        Suspends execution of the given task. This is basically
+        a do-nothing method, since it will not reschedule the task
+        before returning. The task will stay suspended as long as
+        something else outside the loop calls a trap to reschedule it.
+
+        This method will unregister any I/O as well to ensure the task
+        isn't rescheduled in further calls to select()
         """
 
-        ...  # TODO: Unschedule I/O?
+        if task.last_io:
+            self.io_release_task(task)
 
     def reschedule_running(self):
         """
@@ -334,6 +351,8 @@ class AsyncScheduler:
 
         if self.current_task:
             self.run_ready.append(self.current_task)
+        else:
+            raise GiambioError("giambio is not running")
 
     def do_cancel(self, task: Task):
         """
@@ -357,7 +376,6 @@ class AsyncScheduler:
         self._data = self.current_task
         self.reschedule_running()
 
-
     def get_current_pool(self):
         """
         'Returns' the current pool to an async caller
@@ -365,7 +383,6 @@ class AsyncScheduler:
 
         self._data = self.current_pool
         self.reschedule_running()
-
 
     def get_current_loop(self):
         """
@@ -394,6 +411,7 @@ class AsyncScheduler:
         """
 
         self.run_ready.extend(tasks)
+        self.reschedule_running()
 
     def awake_sleeping(self):
         """
@@ -470,7 +488,9 @@ class AsyncScheduler:
 
     def start(self, func: types.FunctionType, *args, loop: bool = True):
         """
-        Starts the event loop from a sync context
+        Starts the event loop from a sync context. If the loop parameter
+        is false, the event loop will not start listening for events
+        automatically and the dispatching is on the users' shoulders
         """
 
         entry = Task(func.__name__ or str(func), func(*args), None)
@@ -502,7 +522,7 @@ class AsyncScheduler:
         else:  # If we're at the main task, we're sure everything else exited
             return True
 
-    def get_all_tasks(self) -> chain:
+    def get_all_tasks(self) -> List[Task]:
         """
         Returns a list of all the tasks the loop is currently
         keeping track of: this includes both running and paused tasks.
@@ -536,9 +556,7 @@ class AsyncScheduler:
         if ensure_done:
             self.cancel_all()
         elif not self.done():
-            raise GiambioError(
-                "event loop not terminated, call this method with ensure_done=False to forcefully exit"
-            )
+            raise GiambioError("event loop not terminated, call this method with ensure_done=False to forcefully exit")
         self.shutdown()
 
     def reschedule_joiners(self, task: Task):
@@ -639,9 +657,7 @@ class AsyncScheduler:
             # or dangling resource open after being cancelled, so maybe we need
             # a different approach altogether
             if task.status == "io":
-                for k in filter(
-                    lambda o: o.data == task, dict(self.selector.get_map()).values()
-                ):
+                for k in filter(lambda o: o.data == task, dict(self.selector.get_map()).values()):
                     self.selector.unregister(k.fileobj)
             elif task.status == "sleep":
                 self.paused.discard(task)
@@ -711,26 +727,4 @@ class AsyncScheduler:
                 self.selector.register(sock, evt, self.current_task)
             except KeyError:
                 # The socket is already registered doing something else
-                raise ResourceBusy(
-                    "The given socket is being read/written by another task"
-                ) from None
-
-    # noinspection PyMethodMayBeStatic
-    async def connect_sock(self, sock: socket.socket, address_tuple: tuple):
-        """
-        Connects a socket asynchronously to a given endpoint
-
-        :param sock: The socket that must to be connected
-        :type sock: socket.socket
-        :param address_tuple: A tuple in the same form as the one
-        passed to socket.socket.connect with an address as a string
-        and a port as an integer
-        :type address_tuple: tuple
-        """
-
-        await want_write(sock)
-        try:
-            return sock.connect(address_tuple)
-        except BlockingIOError:
-            await want_write(sock)
-            return sock.connect(address_tuple)
+                raise ResourceBusy("The given socket is being read/written by another task") from None

@@ -95,7 +95,9 @@ class ErrorStack(GiambioError):
         tracebacks = ""
         for i, err in enumerate(self.errors):
             if i not in (1, len(self.errors)):
-                tracebacks += f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}\n{'-' * 32}\n"
+                tracebacks += (
+                    f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}\n{'-' * 32}\n"
+                )
             else:
                 tracebacks += f"\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}"
         return f"Multiple errors occurred:\n{tracebacks}"

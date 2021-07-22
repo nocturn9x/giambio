@@ -34,15 +34,13 @@ class TaskManager:
         Object constructor
         """
 
-        # The event loop associated with this pool
-        self.loop: giambio.core.AsyncScheduler = giambio.get_event_loop()
         # All the tasks that belong to this pool
-        self.tasks: List[giambio.objects.Task] = []
+        self.tasks: List[giambio.task.Task] = []
         # Whether we have been cancelled or not
         self.cancelled: bool = False
         # The clock time of when we started running, used for
         # timeouts expiration
-        self.started: float = self.loop.clock()
+        self.started: float = giambio.clock()
         # The pool's timeout (in seconds)
         if timeout:
             self.timeout: float = self.started + timeout
@@ -57,7 +55,7 @@ class TaskManager:
         Spawns a child task
         """
 
-        assert self._proper_init
+        assert self._proper_init, "Cannot use improperly initialized pool"
         return await giambio.traps.create_task(func, *args)
 
     async def __aenter__(self):

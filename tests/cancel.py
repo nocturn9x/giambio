@@ -11,15 +11,11 @@ async def child(name: int):
 async def main():
     start = giambio.clock()
     async with giambio.create_pool() as pool:
-        await pool.spawn(
-            child, 1
-        )  # If you comment this line, the pool will exit immediately!
+        await pool.spawn(child, 1)  # If you comment this line, the pool will exit immediately!
         task = await pool.spawn(child, 2)
         await task.cancel()
         print("[main] Children spawned, awaiting completion")
-    print(
-        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
-    )
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":

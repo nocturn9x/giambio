@@ -19,9 +19,7 @@ async def main():
         await pool.spawn(child)
         await pool.spawn(child1)
         print("[main] Children spawned, awaiting completion")
-    print(
-        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
-    )
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":

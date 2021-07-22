@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from giambio.traps import event_wait, event_set
+from giambio.exceptions import GiambioError
 
 
 class Event:
@@ -38,7 +39,7 @@ class Event:
         """
 
         if self.set:
-            raise giambio.exceptions.GiambioError("The event has already been set")
+            raise GiambioError("The event has already been set")
         await event_set(self)
 
     async def wait(self):

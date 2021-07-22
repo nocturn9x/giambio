@@ -15,9 +15,7 @@ async def child(ev: giambio.Event, pause: int):
     await giambio.sleep(pause)
     end_sleep = giambio.clock() - start_sleep
     end_total = giambio.clock() - start_total
-    print(
-        f"[child] Done! Slept for {end_total} seconds total ({end_pause} paused, {end_sleep} sleeping), nice nap!"
-    )
+    print(f"[child] Done! Slept for {end_total} seconds total ({end_pause} paused, {end_sleep} sleeping), nice nap!")
 
 
 async def parent(pause: int = 1):

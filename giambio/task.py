@@ -18,7 +18,7 @@ limitations under the License.
 
 import giambio
 from dataclasses import dataclass, field
-from typing import Union, Coroutine, List, Tuple, Set
+from typing import Union, Coroutine, Set
 
 
 @dataclass
@@ -104,8 +104,9 @@ class Task:
         are propagated as well
         """
 
-        self.joiners.add(await giambio.traps.current_task())
-        print(self.joiners)
+        task = await giambio.traps.current_task()
+        if task:
+            self.joiners.add(task)
         res = await giambio.traps.join(self)
         if self.exc:
             raise self.exc
@@ -142,5 +143,4 @@ class Task:
             self.coroutine.close()
         except RuntimeError:
             pass  # TODO: This is kinda bad
-        assert not self.last_io
-
+        assert not self.last_io, f"task {self.name} was destroyed, but has pending I/O"

@@ -13,9 +13,7 @@ class Debugger(giambio.debug.BaseDebugger):
         print("## Finished running")
 
     def on_task_schedule(self, task, delay: int):
-        print(
-            f">> A task named '{task.name}' was scheduled to run in {delay:.2f} seconds"
-        )
+        print(f">> A task named '{task.name}' was scheduled to run in {delay:.2f} seconds")
 
     def on_task_spawn(self, task):
         print(f">> A task named '{task.name}' was spawned")

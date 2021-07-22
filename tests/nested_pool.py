@@ -19,9 +19,7 @@ async def main():
             print("[main] Children spawned, awaiting completion")
     # This will *only* execute when everything inside the async with block
     # has ran, including any other pool
-    print(
-        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
-    )
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":

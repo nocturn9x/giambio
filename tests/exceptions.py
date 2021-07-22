@@ -26,9 +26,7 @@ async def main():
     except Exception as error:
         # Because exceptions just *work*!
         print(f"[main] Exception from child caught! {repr(error)}")
-    print(
-        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
-    )
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":

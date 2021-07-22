@@ -25,7 +25,7 @@ import types
 import inspect
 from giambio.task import Task
 from types import FunctionType
-from typing import List, Union, Iterable
+from typing import Union, Iterable
 from giambio.exceptions import GiambioError
 
 
@@ -58,7 +58,7 @@ async def create_task(coro: FunctionType, *args):
     elif inspect.iscoroutinefunction(coro):
         return await create_trap("create_task", coro, *args)
     else:
-        raise TypeError("coro must be a coroutine or coroutine function")
+        raise TypeError("coro must be a coroutine function")
 
 
 async def sleep(seconds: Union[int, float]):
@@ -122,7 +122,7 @@ async def join(task):
     Awaits a given task for completion
 
     :param task: The task to join
-    :type task: class: Task
+    :type task: :class: Task
     """
 
     return await create_trap("join", task)
@@ -187,7 +187,6 @@ async def event_set(event):
     """
 
     event.set = True
-    await reschedule_running()
     await schedule_tasks(event.waiters)
 
 
@@ -197,11 +196,3 @@ async def schedule_tasks(tasks: Iterable[Task]):
     """
 
     await create_trap("schedule_tasks", tasks)
-
-
-async def reschedule_running():
-    """
-    Reschedules the current task for execution
-    """
-
-    await create_trap("reschedule_running")

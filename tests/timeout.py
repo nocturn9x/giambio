@@ -16,9 +16,7 @@ async def main():
             await child(20)  # TODO: Broken
     except giambio.exceptions.TooSlowError:
         print("[main] One or more children have timed out!")
-    print(
-        f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds"
-    )
+    print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")
 
 
 if __name__ == "__main__":

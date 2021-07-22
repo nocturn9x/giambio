@@ -169,7 +169,7 @@ class AsyncSocket:
         Wrapper socket method
         """
 
-        raise RuntimeError('Use with_timeout() to set a timeout')
+        raise RuntimeError("Use with_timeout() to set a timeout")
 
     def gettimeout(self):
         """
@@ -205,15 +205,15 @@ class AsyncSocket:
 
         try:
             result = self.sock.connect(address)
-            if getattr(self, 'do_handshake_on_connect', False):
+            if getattr(self, "do_handshake_on_connect", False):
                 await self.do_handshake()
             return result
         except WantWrite:
             await want_write(self.sock)
         err = self.sock.getsockopt(SOL_SOCKET, SO_ERROR)
         if err != 0:
-            raise OSError(err, f'Connect call failed {address}')
-        if getattr(self, 'do_handshake_on_connect', False):
+            raise OSError(err, f"Connect call failed {address}")
+        if getattr(self, "do_handshake_on_connect", False):
             await self.do_handshake()
 
     async def recvfrom(self, buffersize, flags=0):

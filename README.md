@@ -59,6 +59,13 @@ Giambio means to take the best of all of its predecessors, while being:
 - Dependency-free: No fancy C modules, no external libraries, just pure idiomatic Python code
 - Community-based: I frankly wouldn't have bothered making this if curio was open to community additions
 
+Another problem I would like to address and that I've heard some developers rant about is the lack of control
+that the `run()` paradigm causes: you can read a way better and more detailed explanation [here](https://gist.github.com/Justasic/b57bfd05dd8e7a108bc433c8c9a66e59).
+Giambio fixes this problem by exposing all of its internal machinery to the public and also allowing
+to not start listening for events automatically by doing `AsyncScheduler(...).start(..., loop=False)`, in which case
+the responsibility of handling everything (including loop ticks) is transferred to the end user allowing for a much
+more granular control of the loop according to one's needs.
+
 ## Current limitations
 
 giambio is **highly** experimental and there's a lot to work to do before it's usable. Namely:
