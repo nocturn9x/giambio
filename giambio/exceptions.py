@@ -18,6 +18,7 @@ limitations under the License.
 
 import traceback
 from typing import List
+from giambio.task import Task
 
 
 class GiambioError(Exception):
@@ -43,7 +44,7 @@ class CancelledError(GiambioError):
     at least it should be re-raised and never ignored
     """
 
-    ...
+    task: Task
 
 
 class ResourceBusy(GiambioError):

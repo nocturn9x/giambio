@@ -318,7 +318,7 @@ class AsyncScheduler:
                 dict(self.selector.get_map()).values(),
             ):
                 self.io_release(k.fileobj)
-            task.last_io = ()
+        task.last_io = ()
 
     def io_release(self, sock):
         """
