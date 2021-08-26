@@ -42,7 +42,8 @@ def get_event_loop():
 
 
 def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
-    """
+    """            print(hex(id(pool)))
+
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
     called explicitly unless you know what you're doing.
@@ -92,10 +93,7 @@ def create_pool():
     Creates an async pool
     """
 
-    loop = get_event_loop()
-    pool = TaskManager()
-    loop.current_pool = pool
-    return pool
+    return TaskManager()
 
 
 def with_timeout(timeout: int or float):
@@ -103,10 +101,7 @@ def with_timeout(timeout: int or float):
     Creates an async pool with an associated timeout
     """
 
-    loop = get_event_loop()
     # We add 1 to make the timeout intuitive and inclusive (i.e.
     # a 10 seconds timeout means the task is allowed to run 10
     # whole seconds instead of cancelling at the tenth second)
-    pool = TaskManager(timeout + 1)
-    loop.current_pool = pool
-    return pool
+    return TaskManager(timeout + 1)

@@ -236,7 +236,7 @@ class AsyncScheduler:
                 self.current_task.exc = err
                 self.join(self.current_task)
 
-    def create_task(self, corofunc: types.FunctionType, *args, **kwargs) -> Task:
+    def create_task(self, corofunc: types.FunctionType, pool, *args, **kwargs) -> Task:
         """
         Creates a task from a coroutine function and schedules it
         to run. Any extra keyword or positional argument are then
@@ -247,15 +247,18 @@ class AsyncScheduler:
         :type corofunc: function
         """
 
-        task = Task(corofunc.__name__ or str(corofunc), corofunc(*args, **kwargs), self.current_pool)
-        task.next_deadline = self.current_pool.timeout or 0.0
+        task = Task(corofunc.__name__ or str(corofunc), corofunc(*args, **kwargs), pool)
+        task.next_deadline = pool.timeout or 0.0
         task.joiners = {self.current_task}
         self._data = task
         self.tasks.append(task)
         self.run_ready.append(task)
         self.debugger.on_task_spawn(task)
-        self.current_pool.tasks.append(task)
+        pool.tasks.append(task)
         self.reschedule_running()
+        if self.current_pool and task.pool is not self.current_pool:
+            self.current_pool.enclosed_pool = task.pool
+        self.current_pool = task.pool
         return task
 
     def run_task_step(self):
@@ -270,8 +273,8 @@ class AsyncScheduler:
         account, that's self.run's job!
         """
 
-        # Sets the currently running task
         data = None
+        # Sets the currently running task
         self.current_task = self.run_ready.pop(0)
         self.debugger.before_task_step(self.current_task)
         if self.current_task.done():
@@ -293,8 +296,7 @@ class AsyncScheduler:
         # Some debugging and internal chatter here
         self.current_task.status = "run"
         self.current_task.steps += 1
-        self.debugger.after_task_step(self.current_task)
-        if not hasattr(self, method):
+        if not hasattr(self, method) and not callable(getattr(self, method)):
             # If this happens, that's quite bad!
             # This if block is meant to be triggered by other async
             # libraries, which most likely have different trap names and behaviors
@@ -305,6 +307,7 @@ class AsyncScheduler:
             ) from None
         # Sneaky method call, thanks to David Beazley for this ;)
         getattr(self, method)(*args)
+        self.debugger.after_task_step(self.current_task)
 
     def io_release_task(self, task: Task):
         """
@@ -518,7 +521,10 @@ class AsyncScheduler:
             # current pool. If, however, there are still some
             # tasks running, we wait for them to exit in order
             # to avoid orphaned tasks
-            return pool.done()
+            if pool.enclosed_pool and self.cancel_pool(pool.enclosed_pool):
+                return True
+            else:
+                return pool.done()
         else:  # If we're at the main task, we're sure everything else exited
             return True
 
@@ -582,6 +588,8 @@ class AsyncScheduler:
         """
 
         task.joined = True
+        if task is not self.current_task:
+            task.joiners.add(self.current_task)
         if task.finished or task.cancelled:
             if not task.cancelled:
                 self.debugger.on_task_exit(task)
@@ -589,33 +597,34 @@ class AsyncScheduler:
                 self.io_release_task(task)
             if task.pool is None:
                 return
-            if self.current_pool and self.current_pool.done():
-                # If the current pool has finished executing or we're at the first parent
+            if task.pool.done():
+                # If the pool has finished executing or we're at the first parent
                 # task that kicked the loop, we can safely reschedule the parent(s)
                 self.reschedule_joiners(task)
         elif task.exc:
             task.status = "crashed"
-            # TODO: We might want to do a bit more complex traceback hacking to remove any extra
-            #  frames from the exception call stack, but for now removing at least the first one
-            #  seems a sensible approach (it's us catching it so we don't care about that)
-            task.exc.__traceback__ = task.exc.__traceback__.tb_next
+            if task.exc.__traceback__:
+                # TODO: We might want to do a bit more complex traceback hacking to remove any extra
+                #  frames from the exception call stack, but for now removing at least the first one
+                #  seems a sensible approach (it's us catching it so we don't care about that)
+                task.exc.__traceback__ = task.exc.__traceback__.tb_next
             if task.last_io:
                 self.io_release_task(task)
             self.debugger.on_exception_raised(task, task.exc)
             if task.pool is None:
                 # Parent task has no pool, so we propagate
                 raise
-            if self.cancel_pool(self.current_pool):
+            if self.cancel_pool(task.pool):
                 # This will reschedule the parent(s)
-                # only if all the tasks inside the current
+                # only if all the tasks inside the task's
                 # pool have finished executing, either
                 # by cancellation, an exception
                 # or just returned
-                for t in task.joiners:
+                for t in task.joiners.copy():
                     # Propagate the exception
                     try:
                         t.throw(task.exc)
-                    except (StopIteration, CancelledError):
+                    except (StopIteration, CancelledError, RuntimeError):
                         # TODO: Need anything else?
                         task.joiners.remove(t)
                 self.reschedule_joiners(task)
@@ -657,8 +666,7 @@ class AsyncScheduler:
             # or dangling resource open after being cancelled, so maybe we need
             # a different approach altogether
             if task.status == "io":
-                for k in filter(lambda o: o.data == task, dict(self.selector.get_map()).values()):
-                    self.selector.unregister(k.fileobj)
+                self.io_release_task(task)
             elif task.status == "sleep":
                 self.paused.discard(task)
             try:
@@ -679,6 +687,10 @@ class AsyncScheduler:
                 task.status = "cancelled"
                 self.io_release_task(self.current_task)
                 self.debugger.after_cancel(task)
+            else:
+                # If the task ignores our exception, we'll
+                # raise it later again
+                task.cancel_pending = True
         else:
             # If we can't cancel in a somewhat "graceful" way, we just
             # defer this operation for later (check run() for more info)

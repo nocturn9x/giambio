@@ -16,6 +16,7 @@ async def main():
         async with giambio.create_pool() as a_pool:
             await a_pool.spawn(child, 3)
             await a_pool.spawn(child, 4)
+            # This executes after spawning all 4 tasks
             print("[main] Children spawned, awaiting completion")
     # This will *only* execute when everything inside the async with block
     # has ran, including any other pool

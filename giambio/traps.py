@@ -41,7 +41,7 @@ def create_trap(method, *args):
     return data
 
 
-async def create_task(coro: FunctionType, *args):
+async def create_task(coro: FunctionType, pool, *args):
     """
     Spawns a new task in the current event loop from a bare coroutine
     function. All extra positional arguments are passed to the function
@@ -56,7 +56,7 @@ async def create_task(coro: FunctionType, *args):
             "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)"
         )
     elif inspect.iscoroutinefunction(coro):
-        return await create_trap("create_task", coro, *args)
+        return await create_trap("create_task", coro, pool, *args)
     else:
         raise TypeError("coro must be a coroutine function")
 

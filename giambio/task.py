@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,7 @@ limitations under the License.
 """
 
 import giambio
+import warnings
 from dataclasses import dataclass, field
 from typing import Union, Coroutine, Set
 
@@ -95,6 +96,7 @@ class Task:
         :type err: Exception
         """
 
+        # self.exc = err
         return self.coroutine.throw(err)
 
     async def join(self):
@@ -143,4 +145,5 @@ class Task:
             self.coroutine.close()
         except RuntimeError:
             pass  # TODO: This is kinda bad
-        assert not self.last_io, f"task {self.name} was destroyed, but has pending I/O"
+        if self.last_io:
+            warnings.warn(f"task '{self.name}' was destroyed, but has pending I/O")

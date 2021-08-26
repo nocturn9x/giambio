@@ -5,7 +5,7 @@ from debugger import Debugger
 async def child():
     print("[child] Child spawned!! Sleeping for 2 seconds")
     await giambio.sleep(2)
-    print("[child] Had a nice nap!")
+    print("[child] Had a nice nap, suiciding now!")
     raise TypeError("rip")  # Watch the exception magically propagate!
 
 
@@ -33,13 +33,13 @@ async def main():
         async with giambio.create_pool() as pool:
             await pool.spawn(child)
             await pool.spawn(child1)
-            print("[main] Children spawned, awaiting completion")
+            print("[main] First 2 children spawned, awaiting completion")
             async with giambio.create_pool() as new_pool:
                 # This pool will be cancelled by the exception
                 # in the other pool
                 await new_pool.spawn(child2)
                 await new_pool.spawn(child3)
-                print("[main] 3rd child spawned")
+                print("[main] Third and fourth children spawned")
     except Exception as error:
         # Because exceptions just *work*!
         print(f"[main] Exception from child caught! {repr(error)}")

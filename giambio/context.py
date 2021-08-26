@@ -18,7 +18,7 @@ limitations under the License.
 
 import types
 import giambio
-from typing import List
+from typing import List, Optional
 
 
 class TaskManager:
@@ -49,6 +49,9 @@ class TaskManager:
         # Whether our timeout expired or not
         self.timed_out: bool = False
         self._proper_init = False
+        self.enclosing_pool: Optional["giambio.context.TaskManager"] = giambio.get_event_loop().current_pool
+        self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
+        # giambio.get_event_loop().current_pool = self
 
     async def spawn(self, func: types.FunctionType, *args) -> "giambio.task.Task":
         """
@@ -56,7 +59,7 @@ class TaskManager:
         """
 
         assert self._proper_init, "Cannot use improperly initialized pool"
-        return await giambio.traps.create_task(func, *args)
+        return await giambio.traps.create_task(func, self, *args)
 
     async def __aenter__(self):
         """
