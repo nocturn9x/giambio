@@ -228,6 +228,7 @@ class AsyncScheduler:
                 self.current_task.result = ret.value
                 self.current_task.finished = True
                 self.join(self.current_task)
+                self.tasks.remove(self.current_task)
             except BaseException as err:
                 # Our handy join mechanism will handle all the hassle of
                 # rescheduling joiners and propagating errors, so we
@@ -235,6 +236,7 @@ class AsyncScheduler:
                 # self.join() work its magic
                 self.current_task.exc = err
                 self.join(self.current_task)
+                self.tasks.remove(self.current_task)
 
     def create_task(self, corofunc: types.FunctionType, pool, *args, **kwargs) -> Task:
         """
@@ -687,6 +689,7 @@ class AsyncScheduler:
                 task.status = "cancelled"
                 self.io_release_task(self.current_task)
                 self.debugger.after_cancel(task)
+                self.tasks.remove(self.current_task)
             else:
                 # If the task ignores our exception, we'll
                 # raise it later again
