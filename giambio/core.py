@@ -689,7 +689,7 @@ class AsyncScheduler:
                 task.status = "cancelled"
                 self.io_release_task(self.current_task)
                 self.debugger.after_cancel(task)
-                self.tasks.remove(self.current_task)
+                self.tasks.remove(task)
             else:
                 # If the task ignores our exception, we'll
                 # raise it later again
