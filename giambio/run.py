@@ -42,8 +42,7 @@ def get_event_loop():
 
 
 def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
-    """            print(hex(id(pool)))
-
+    """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
     called explicitly unless you know what you're doing.
@@ -101,7 +100,31 @@ def with_timeout(timeout: int or float):
     Creates an async pool with an associated timeout
     """
 
-    # We add 1 to make the timeout intuitive and inclusive (i.e.
-    # a 10 seconds timeout means the task is allowed to run 10
-    # whole seconds instead of cancelling at the tenth second)
-    return TaskManager(timeout + 1)
+    assert timeout > 0, "The timeout must be greater than 0"
+    mgr = TaskManager(timeout)
+    loop = get_event_loop()
+    if loop.current_task.pool is None:
+        loop.current_pool = mgr
+        loop.current_task.pool = mgr
+        loop.current_task.next_deadline = mgr.timeout or 0.0
+        loop.deadlines.put(mgr)
+    return mgr
+
+
+def skip_after(timeout: int or float):
+    """
+    Creates an async pool with an associated timeout, but
+    without raising a TooSlowError exception. The pool
+    is simply cancelled and code execution moves on
+    """
+
+    assert timeout > 0, "The timeout must be greater than 0"
+    mgr = TaskManager(timeout, False)
+    loop = get_event_loop()
+    if loop.current_task.pool is None:
+        loop.current_pool = mgr
+        loop.current_task.pool = mgr
+        loop.current_task.next_deadline = mgr.timeout or 0.0
+        loop.deadlines.put(mgr)
+    return mgr
+

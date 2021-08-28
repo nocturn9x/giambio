@@ -15,7 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from giambio.traps import event_wait, event_set
+from giambio.traps import event_wait, event_set, current_task
 from giambio.exceptions import GiambioError
 
 
@@ -48,3 +48,19 @@ class Event:
         """
 
         await event_wait(self)
+
+
+class Queue:
+    """
+    An asynchronous queue similar to asyncio.Queue.
+    NOT thread safe!
+    """
+
+    def __init__(self):
+        """
+        Object constructor
+        """
+
+        self.events = {}
+
+#    async def put

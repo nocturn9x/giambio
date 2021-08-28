@@ -27,9 +27,12 @@ class TaskManager:
 
     :param timeout: The pool's timeout length in seconds, if any, defaults to None
     :type timeout: float, optional
+    :param raise_on_timeout: Whether to catch a TooSlowError exception when the pool's
+        timeout expires or not. Defaults to True
+    :type raise_on_timeout: bool, optional
     """
 
-    def __init__(self, timeout: float = None) -> None:
+    def __init__(self, timeout: float = None, raise_on_timeout: bool = True) -> None:
         """
         Object constructor
         """
@@ -45,21 +48,21 @@ class TaskManager:
         if timeout:
             self.timeout: float = self.started + timeout
         else:
-            self.timeout: None = None
+            self.timeout = None
         # Whether our timeout expired or not
         self.timed_out: bool = False
         self._proper_init = False
-        self.enclosing_pool: Optional["giambio.context.TaskManager"] = giambio.get_event_loop().current_pool
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
-        # giambio.get_event_loop().current_pool = self
+        self.raise_on_timeout: bool = raise_on_timeout
 
-    async def spawn(self, func: types.FunctionType, *args) -> "giambio.task.Task":
+    async def spawn(self, func: types.FunctionType, *args, **kwargs) -> "giambio.task.Task":
         """
         Spawns a child task
         """
 
         assert self._proper_init, "Cannot use improperly initialized pool"
-        return await giambio.traps.create_task(func, self, *args)
+        self.tasks.append(await giambio.traps.create_task(func, self, *args, **kwargs))
+        return self.tasks[-1]
 
     async def __aenter__(self):
         """
@@ -80,7 +83,10 @@ class TaskManager:
             # end of the block and wait for all
             # children to exit
             await task.join()
+            self.tasks.remove(task)
         self._proper_init = False
+        if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
+            return True
 
     async def cancel(self):
         """
@@ -91,6 +97,7 @@ class TaskManager:
         # TODO: This breaks, somehow, investigation needed
         for task in self.tasks:
             await task.cancel()
+            self.tasks.remove(task)
 
     def done(self) -> bool:
         """
@@ -98,4 +105,4 @@ class TaskManager:
         pool have exited, False otherwise
         """
 
-        return all([task.done() for task in self.tasks])
+        return self._proper_init and all([task.done() for task in self.tasks])

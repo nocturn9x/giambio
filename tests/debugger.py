@@ -34,6 +34,8 @@ class Debugger(giambio.debug.BaseDebugger):
         print(f"# Task '{task.name}' slept for {seconds:.2f} seconds")
 
     def before_io(self, timeout):
+        if timeout is None:
+            timeout = float("inf")
         print(f"!! About to check for I/O for up to {timeout:.2f} seconds")
 
     def after_io(self, timeout):

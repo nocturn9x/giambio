@@ -23,7 +23,7 @@ __version__ = (0, 0, 1)
 from . import exceptions, socket, context, core, task, io
 from .traps import sleep, current_task
 from .sync import Event
-from .run import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout
+from .run import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout, skip_after
 from .util import debug
 
 
@@ -41,4 +41,5 @@ __all__ = [
     "current_task",
     "new_event_loop",
     "debug",
+    "skip_after"
 ]

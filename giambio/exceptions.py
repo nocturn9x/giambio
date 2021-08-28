@@ -53,22 +53,19 @@ class ResourceBusy(GiambioError):
     one task at a time
     """
 
-    ...
-
 
 class ResourceClosed(GiambioError):
     """
     Raised when I/O is attempted on a closed resource
     """
 
-    ...
-
-
 class TooSlowError(GiambioError):
     """
     This is raised if the timeout of a pool created using
     giambio.with_timeout expires
     """
+
+    task: Task
 
 
 class ErrorStack(GiambioError):

@@ -19,6 +19,7 @@ limitations under the License.
 # Import libraries and internal resources
 import types
 from giambio.task import Task
+from collections import deque
 from timeit import default_timer
 from giambio.context import TaskManager
 from typing import List, Optional, Any, Dict
@@ -99,7 +100,7 @@ class AsyncScheduler:
         # All tasks the loop has
         self.tasks: List[Task] = []
         # Tasks that are ready to run
-        self.run_ready: List[Task] = []
+        self.run_ready: deque = deque()
         # Selector object to perform I/O multiplexing
         self.selector = selector or DefaultSelector()
         # This will always point to the currently running coroutine (Task object)
@@ -123,7 +124,7 @@ class AsyncScheduler:
         # The I/O skip limit. TODO: Back up this value with euristics
         self.io_skip_limit = io_skip_limit or 5
         # The max. I/O timeout
-        self.io_max_timeout = io_max_timeout
+        self.io_max_timeout = io_max_timeout or 86400
 
     def __repr__(self):
         """
@@ -187,33 +188,42 @@ class AsyncScheduler:
         """
 
         while True:
+            if self.done():
+                # If we're done, which means there are
+                # both no paused tasks and no running tasks, we
+                # simply tear us down and return to self.start
+                self.close()
+                break
+            elif not self.run_ready:
+                # Stores deadlines for tasks (deadlines are pool-specific).
+                # The deadlines queue will internally make sure not to store
+                # a deadline for the same pool twice. This makes the timeouts
+                # model less flexible, because one can't change the timeout
+                # after it is set, but it makes the implementation easier
+                if not self.current_pool and self.current_task.pool:
+                    self.current_pool = self.current_task.pool
+                self.deadlines.put(self.current_pool)
+                # If there are no actively running tasks, we start by
+                # checking for I/O. This method will wait for I/O until
+                # the closest deadline to avoid starving sleeping tasks
+                # or missing deadlines
+                if self.selector.get_map():
+                    self.check_io()
+                if self.deadlines:
+                    # Deadline expiration is our next step
+                    try:
+                        self.prune_deadlines()
+                    except TooSlowError as t:
+                        task = t.args[0]
+                        task.exc = t
+                        self.join(task)
+                if self.paused:
+                    # Next we try to (re)schedule the asleep tasks
+                    self.awake_sleeping()
+            # Otherwise, while there are tasks ready to run, we run them!
             try:
-                if self.done():
-                    # If we're done, which means there are
-                    # both no paused tasks and no running tasks, we
-                    # simply tear us down and return to self.start
-                    self.close()
-                    break
-                elif not self.run_ready:
-                    # If there are no actively running tasks, we start by
-                    # checking for I/O. This method will wait for I/O until
-                    # the closest deadline to avoid starving sleeping tasks
-                    if self.selector.get_map():
-                        self.check_io()
-                    if self.deadlines:
-                        # Then we start checking for deadlines, if there are any
-                        self.expire_deadlines()
-                    if self.paused:
-                        # Next we try to (re)schedule the asleep tasks
-                        self.awake_sleeping()
-                if self.current_pool and self.current_pool.timeout and not self.current_pool.timed_out:
-                    # Stores deadlines for tasks (deadlines are pool-specific).
-                    # The deadlines queue will internally make sure not to store
-                    # a deadline for the same pool twice. This makes the timeouts
-                    # model less flexible, because one can't change the timeout
-                    # after it is set, but it makes the implementation easier
-                    self.deadlines.put(self.current_pool)
-                # Otherwise, while there are tasks ready to run, we run them!
+                # This try/except block catches all runtime
+                # exceptions
                 while self.run_ready:
                     self.run_task_step()
             except StopIteration as ret:
@@ -236,17 +246,21 @@ class AsyncScheduler:
                 # self.join() work its magic
                 self.current_task.exc = err
                 self.join(self.current_task)
-                self.tasks.remove(self.current_task)
+                if self.current_task in self.tasks:
+                    self.tasks.remove(self.current_task)
 
     def create_task(self, corofunc: types.FunctionType, pool, *args, **kwargs) -> Task:
         """
         Creates a task from a coroutine function and schedules it
-        to run. Any extra keyword or positional argument are then
-        passed to the function
+        to run. The associated pool that spawned said task is also
+        needed, while any extra keyword or positional arguments are
+        passed to the function itself
 
         :param corofunc: The coroutine function (not a coroutine!) to
-        spawn
+            spawn
         :type corofunc: function
+        :param pool: The giambio.context.TaskManager object that
+            spawned the task
         """
 
         task = Task(corofunc.__name__ or str(corofunc), corofunc(*args, **kwargs), pool)
@@ -256,11 +270,10 @@ class AsyncScheduler:
         self.tasks.append(task)
         self.run_ready.append(task)
         self.debugger.on_task_spawn(task)
-        pool.tasks.append(task)
-        self.reschedule_running()
         if self.current_pool and task.pool is not self.current_pool:
             self.current_pool.enclosed_pool = task.pool
         self.current_pool = task.pool
+        self.reschedule_running()
         return task
 
     def run_task_step(self):
@@ -277,12 +290,18 @@ class AsyncScheduler:
 
         data = None
         # Sets the currently running task
-        self.current_task = self.run_ready.pop(0)
-        self.debugger.before_task_step(self.current_task)
+        self.current_task = self.run_ready.popleft()
         if self.current_task.done():
             # We need to make sure we don't try to execute
             # exited tasks that are on the running queue
             return
+        if not self.current_pool and self.current_task.pool:
+            self.current_pool = self.current_task.pool
+        self.deadlines.put(self.current_pool)
+        self.debugger.before_task_step(self.current_task)
+        # Some debugging and internal chatter here
+        self.current_task.status = "run"
+        self.current_task.steps += 1
         if self.current_task.cancel_pending:
             # We perform the deferred cancellation
             # if it was previously scheduled
@@ -291,9 +310,6 @@ class AsyncScheduler:
         # somewhere)
         method, *args = self.current_task.run(self._data.get(self.current_task))
         self._data.pop(self.current_task, None)
-        # Some debugging and internal chatter here
-        self.current_task.status = "run"
-        self.current_task.steps += 1
         if not hasattr(self, method) and not callable(getattr(self, method)):
             # If this happens, that's quite bad!
             # This if block is meant to be triggered by other async
@@ -306,6 +322,16 @@ class AsyncScheduler:
         # Sneaky method call, thanks to David Beazley for this ;)
         getattr(self, method)(*args)
         self.debugger.after_task_step(self.current_task)
+
+    def io_release(self, sock):
+        """
+        Releases the given resource from our
+        selector.
+        :param sock: The resource to be released
+        """
+
+        if self.selector.get_map() and sock in self.selector.get_map():
+            self.selector.unregister(sock)
 
     def io_release_task(self, task: Task):
         """
@@ -320,16 +346,6 @@ class AsyncScheduler:
             ):
                 self.io_release(k.fileobj)
         task.last_io = ()
-
-    def io_release(self, sock):
-        """
-        Releases the given resource from our
-        selector.
-        :param sock: The resource to be released
-        """
-
-        if self.selector.get_map() and sock in self.selector.get_map():
-            self.selector.unregister(sock)
 
     def suspend(self, task: Task):
         """
@@ -393,16 +409,22 @@ class AsyncScheduler:
         self._data[self.current_task] = self
         self.reschedule_running()
 
-    def expire_deadlines(self):
+    def prune_deadlines(self):
         """
-        Handles expiring deadlines by raising an exception
-        inside the correct pool if its timeout expired
+        Removes expired deadlines after their timeout
+        has expired
         """
 
-        while self.deadlines.get_closest_deadline() <= self.clock():
+        while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
+            if pool.done():
+                continue
             pool.timed_out = True
-            self.cancel_pool(pool)
+            for task in pool.tasks:
+                if not task.done():
+                     self.paused.discard(task)
+                     self.io_release_task(task)
+                     task.throw(TooSlowError(task))
 
     def schedule_tasks(self, tasks: List[Task]):
         """
@@ -420,6 +442,12 @@ class AsyncScheduler:
         has elapsed
         """
 
+        for _, __, t in self.paused.container:
+            # This is to ensure that even when tasks are
+            # awaited instead of spawned, timeouts work as
+            # expected
+            if t.done() or t in self.run_ready or t is self.current_task:
+                self.paused.discard(t)
         while self.paused and self.paused.get_closest_deadline() <= self.clock():
             # Reschedules tasks when their deadline has elapsed
             task = self.paused.get()
@@ -569,6 +597,8 @@ class AsyncScheduler:
         given task, if any
         """
 
+        if task.pool and task.pool.enclosed_pool and not task.pool.enclosed_pool.done():
+                return
         for t in task.joiners:
             if t not in self.run_ready:
                 # Since a task can be the parent
@@ -586,8 +616,6 @@ class AsyncScheduler:
         """
 
         task.joined = True
-        if task is not self.current_task:
-            task.joiners.add(self.current_task)
         if task.finished or task.cancelled:
             if not task.cancelled:
                 self.debugger.on_task_exit(task)
@@ -603,8 +631,8 @@ class AsyncScheduler:
             task.status = "crashed"
             if task.exc.__traceback__:
                 # TODO: We might want to do a bit more complex traceback hacking to remove any extra
-                #  frames from the exception call stack, but for now removing at least the first one
-                #  seems a sensible approach (it's us catching it so we don't care about that)
+                # frames from the exception call stack, but for now removing at least the first one
+                # seems a sensible approach (it's us catching it so we don't care about that)
                 task.exc.__traceback__ = task.exc.__traceback__.tb_next
             if task.last_io:
                 self.io_release_task(task)

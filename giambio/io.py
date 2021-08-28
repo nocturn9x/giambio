@@ -37,8 +37,9 @@ class AsyncSocket:
     Abstraction layer for asynchronous sockets
     """
 
-    def __init__(self, sock):
+    def __init__(self, sock, do_handshake_on_connect: bool = True):
         self.sock = sock
+        self.do_handshake_on_connect = do_handshake_on_connect
         self._fd = sock.fileno()
         self.sock.setblocking(False)
 
@@ -55,6 +56,22 @@ class AsyncSocket:
                 return self.sock.recv(max_size, flags)
             except WantRead:
                 await want_read(self.sock)
+            except WantWrite:
+                await want_write(self.sock)
+
+    async def connect(self, address):
+        """
+        Wrapper socket method
+        """
+
+        if self._fd == -1:
+            raise ResourceClosed("I/O operation on closed socket")
+        while True:
+            try:
+                self.sock.connect(address)
+                if self.do_handshake_on_connect:
+                    await self.do_handshake()
+                return
             except WantWrite:
                 await want_write(self.sock)
 
@@ -107,19 +124,6 @@ class AsyncSocket:
 
         if self.sock:
             self.sock.shutdown(how)
-
-    async def connect(self, addr: tuple):
-        """
-        Connects the socket to an endpoint
-        """
-
-        if self._fd == -1:
-            raise ResourceClosed("I/O operation on closed socket")
-        try:
-            self.sock.connect(addr)
-        except WantWrite:
-            await want_write(self.sock)
-        self.sock.connect(addr)
 
     async def bind(self, addr: tuple):
         """
@@ -197,24 +201,6 @@ class AsyncSocket:
                 await want_read(self.sock)
             except WantWrite:
                 await want_write(self.sock)
-
-    async def connect(self, address):
-        """
-        Wrapper socket method
-        """
-
-        try:
-            result = self.sock.connect(address)
-            if getattr(self, "do_handshake_on_connect", False):
-                await self.do_handshake()
-            return result
-        except WantWrite:
-            await want_write(self.sock)
-        err = self.sock.getsockopt(SOL_SOCKET, SO_ERROR)
-        if err != 0:
-            raise OSError(err, f"Connect call failed {address}")
-        if getattr(self, "do_handshake_on_connect", False):
-            await self.do_handshake()
 
     async def recvfrom(self, buffersize, flags=0):
         """

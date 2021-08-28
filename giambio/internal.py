@@ -162,7 +162,7 @@ class TimeQueue:
 
 class DeadlinesQueue:
     """
-    An ordered queue for storing tasks deadlines
+    An ordered queue for storing task deadlines
     """
 
     def __init__(self):
@@ -211,7 +211,7 @@ class DeadlinesQueue:
         """
 
         idx = self.index(item)
-        if idx != 1:
+        if idx != -1:
             self.container.pop(idx)
             heapify(self.container)
 
@@ -267,12 +267,13 @@ class DeadlinesQueue:
         """
         Pushes a pool with its deadline onto the queue. The
         timeout amount will be inferred from the pool object
-        itself
+        itself. Completed or expired pools are not added to the
+        queue. Pools without a timeout are also ignored
 
         :param pool: The pool object to store
         """
 
-        if pool not in self.pools:
+        if pool and pool not in self.pools and not pool.done() and not pool.timed_out and pool.timeout:
             self.pools.add(pool)
             heappush(self.container, (pool.timeout, self.sequence, pool))
             self.sequence += 1
