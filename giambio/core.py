@@ -422,9 +422,9 @@ class AsyncScheduler:
             pool.timed_out = True
             for task in pool.tasks:
                 if not task.done():
-                     self.paused.discard(task)
-                     self.io_release_task(task)
-                     task.throw(TooSlowError(task))
+                    self.paused.discard(task)
+                    self.io_release_task(task)
+                    task.throw(TooSlowError(task))
 
     def schedule_tasks(self, tasks: List[Task]):
         """
@@ -446,8 +446,9 @@ class AsyncScheduler:
             # This is to ensure that even when tasks are
             # awaited instead of spawned, timeouts work as
             # expected
-            if t.done() or t in self.run_ready or t is self.current_task:
+            if t.done() or t in self.run_ready:
                 self.paused.discard(t)
+                print(t is self.current_task)
         while self.paused and self.paused.get_closest_deadline() <= self.clock():
             # Reschedules tasks when their deadline has elapsed
             task = self.paused.get()
@@ -598,7 +599,7 @@ class AsyncScheduler:
         """
 
         if task.pool and task.pool.enclosed_pool and not task.pool.enclosed_pool.done():
-                return
+            return
         for t in task.joiners:
             if t not in self.run_ready:
                 # Since a task can be the parent

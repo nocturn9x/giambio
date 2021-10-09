@@ -12,7 +12,9 @@ async def main():
     start = giambio.clock()
     async with giambio.skip_after(10) as pool:
         await pool.spawn(child, 7)  # This will complete
-        await pool.spawn(child, 15) # This will not
+        await giambio.sleep(2)  # This will make the code below wait 2 seconds
+        await pool.spawn(child, 15)  # This will not complete
+        await giambio.sleep(50)
         await child(20)  # Neither will this
     if pool.timed_out:
         print("[main] One or more children have timed out!")

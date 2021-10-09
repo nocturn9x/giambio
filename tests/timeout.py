@@ -11,9 +11,11 @@ async def child(name: int):
 async def main():
     start = giambio.clock()
     try:
-        async with giambio.with_timeout(10) as pool:
+        async with giambio.with_timeout(12) as pool:
             await pool.spawn(child, 7)  # This will complete
-            await pool.spawn(child, 15) # This will not
+            await giambio.sleep(2)      # This will make the code below wait 2 seconds
+            await pool.spawn(child, 15)  # This will not complete
+            await giambio.sleep(50)
             await child(20)  # Neither will this
     except giambio.exceptions.TooSlowError:
         print("[main] One or more children have timed out!")
@@ -21,4 +23,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    giambio.run(main, debugger=())
+    giambio.run(main, debugger=Debugger())

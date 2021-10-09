@@ -59,6 +59,7 @@ class ResourceClosed(GiambioError):
     Raised when I/O is attempted on a closed resource
     """
 
+
 class TooSlowError(GiambioError):
     """
     This is raised if the timeout of a pool created using

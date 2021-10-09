@@ -41,5 +41,5 @@ __all__ = [
     "current_task",
     "new_event_loop",
     "debug",
-    "skip_after"
+    "skip_after",
 ]
