@@ -23,4 +23,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    giambio.run(main, debugger=Debugger())
+    giambio.run(main, debugger=())

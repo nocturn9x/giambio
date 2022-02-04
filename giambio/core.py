@@ -20,9 +20,10 @@ limitations under the License.
 import types
 from giambio.task import Task
 from collections import deque
+from functools import partial
 from timeit import default_timer
 from giambio.context import TaskManager
-from typing import List, Optional, Any, Dict
+from typing import Callable, List, Optional, Any, Dict
 from giambio.util.debug import BaseDebugger
 from giambio.internal import TimeQueue, DeadlinesQueue
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
@@ -125,6 +126,7 @@ class AsyncScheduler:
         self.io_skip_limit = io_skip_limit or 5
         # The max. I/O timeout
         self.io_max_timeout = io_max_timeout or 86400
+        self.entry_point: Optional[Task] = None
 
     def __repr__(self):
         """
@@ -211,12 +213,7 @@ class AsyncScheduler:
                     self.check_io()
                 if self.deadlines:
                     # Deadline expiration is our next step
-                    try:
-                        self.prune_deadlines()
-                    except TooSlowError as t:
-                        task = t.args[0]
-                        task.exc = t
-                        self.join(task)
+                    self.prune_deadlines()
                 if self.paused:
                     # Next we try to (re)schedule the asleep tasks
                     self.awake_sleeping()
@@ -409,6 +406,26 @@ class AsyncScheduler:
         self._data[self.current_task] = self
         self.reschedule_running()
 
+    def handle_task_exit(self, task: Task, to_call: Callable):
+        """
+        Convenience method for handling StopIteration
+        exceptions from tasks
+        """
+
+        try:
+            to_call()
+        except StopIteration as ret:
+            task.status = "end"
+            task.result = ret.value
+            task.finished = True
+            self.join(task)
+            self.tasks.remove(task)
+        except BaseException as err:
+            task.exc = err
+            self.join(task)
+            if task in self.tasks:
+                self.tasks.remove(task)
+
     def prune_deadlines(self):
         """
         Removes expired deadlines after their timeout
@@ -417,14 +434,14 @@ class AsyncScheduler:
 
         while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
-            if pool.done():
-                continue
             pool.timed_out = True
+            if not pool.tasks and self.current_task is self.entry_point:
+                self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
             for task in pool.tasks:
                 if not task.done():
                     self.paused.discard(task)
                     self.io_release_task(task)
-                    task.throw(TooSlowError(task))
+                    self.handle_task_exit(task, partial(task.throw, TooSlowError(task)))
 
     def schedule_tasks(self, tasks: List[Task]):
         """
@@ -448,7 +465,6 @@ class AsyncScheduler:
             # expected
             if t.done() or t in self.run_ready:
                 self.paused.discard(t)
-                print(t is self.current_task)
         while self.paused and self.paused.get_closest_deadline() <= self.clock():
             # Reschedules tasks when their deadline has elapsed
             task = self.paused.get()
@@ -525,6 +541,7 @@ class AsyncScheduler:
 
         entry = Task(func.__name__ or str(func), func(*args), None)
         self.tasks.append(entry)
+        self.entry_point = entry
         self.run_ready.append(entry)
         self.debugger.on_start()
         if loop:

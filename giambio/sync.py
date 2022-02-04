@@ -15,7 +15,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from giambio.traps import event_wait, event_set, current_task
+from typing import Any
+from giambio.traps import event_wait, event_set
 from giambio.exceptions import GiambioError
 
 
@@ -56,12 +57,16 @@ class Queue:
     NOT thread safe!
     """
 
-    def __init__(self):
+    def __init__(self, maxsize: int):
         """
         Object constructor
         """
 
         self.events = {}
+        self.container = []
 
 
-#    async def put
+    async def put(self, item: Any):
+        """
+
+        """

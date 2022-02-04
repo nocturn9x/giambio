@@ -29,7 +29,7 @@ class TimeQueue:
 
     :param clock: The same monotonic clock that was passed to the thread-local event loop.
         It is important for the queue to be synchronized with the loop as this allows
-       the sleeping mechanism to work reliably
+        the sleeping mechanism to work reliably
     """
 
     def __init__(self, clock):
@@ -44,7 +44,7 @@ class TimeQueue:
         self.sequence = 0
         self.container: List[Tuple[float, int, Task]] = []
 
-    def __contains__(self, item):
+    def __contains__(self, item: Task):
         """
         Implements item in self. This method behaves
         as if the queue only contained tasks and ignores
@@ -56,7 +56,7 @@ class TimeQueue:
                 return True
         return False
 
-    def index(self, item):
+    def index(self, item: Task):
         """
         Returns the index of the given item in the list
         or -1 if it is not present
@@ -67,7 +67,7 @@ class TimeQueue:
                 return i
         return -1
 
-    def discard(self, item):
+    def discard(self, item: Task):
         """
         Discards an item from the queue and
         calls heapify(self.container) to keep
@@ -112,7 +112,7 @@ class TimeQueue:
         except IndexError:
             raise StopIteration from None
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         """
         Implements self[n]
         """

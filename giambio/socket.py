@@ -17,7 +17,7 @@ limitations under the License.
 """
 
 import socket as _socket
-from .io import AsyncSocket
+from giambio.io import AsyncSocket
 
 
 def wrap_socket(sock: _socket.socket) -> AsyncSocket:

@@ -16,9 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import ssl
-from socket import SOL_SOCKET, SO_ERROR
-import socket as builtin_socket
 from giambio.exceptions import ResourceClosed
 from giambio.traps import want_write, want_read, io_release
 
@@ -114,8 +111,8 @@ class AsyncSocket:
             raise ResourceClosed("I/O operation on closed socket")
         await io_release(self.sock)
         self.sock.close()
-        self._sock = None
-        self.sock = -1
+        self._fd = -1
+        self.sock = None
 
     async def shutdown(self, how):
         """
