@@ -242,6 +242,32 @@ class AsyncSocket:
                 await want_write(self.sock)
             except WantRead:
                 await want_read(self.sock)
+    
+    async def getpeername(self):
+        """
+        Wrapper socket method
+        """
+
+        while True:
+            try:
+                return self.sock.getpeername()
+            except WantWrite:
+                await want_write(self.sock)
+            except WantRead:
+                await want_read(self.sock)
+
+    async def getsockname(self):
+        """
+        Wrapper socket method
+        """
+
+        while True:
+            try:
+                return self.sock.getpeername()
+            except WantWrite:
+                await want_write(self.sock)
+            except WantRead:
+                await want_read(self.sock)
 
     async def recvmsg(self, bufsize, ancbufsize=0, flags=0):
         """

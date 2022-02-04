@@ -20,9 +20,9 @@ __author__ = "Nocturn9x"
 __version__ = (0, 0, 1)
 
 
-from . import exceptions, socket, context, core, task, io
+from giambio import exceptions, socket, context, core, task, io
 from giambio.traps import sleep, current_task
-from giambio.sync import Event
+from giambio.sync import Event, Queue
 from giambio.runtime import run, clock, create_pool, get_event_loop, new_event_loop, with_timeout, skip_after
 from giambio.util import debug
 
@@ -33,6 +33,7 @@ __all__ = [
     "context",
     "sleep",
     "Event",
+    "Queue",
     "run",
     "clock",
     "create_pool",
@@ -42,4 +43,7 @@ __all__ = [
     "new_event_loop",
     "debug",
     "skip_after",
+    "task",
+    "io",
+    "socket"
 ]

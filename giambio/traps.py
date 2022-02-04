@@ -25,7 +25,7 @@ import types
 import inspect
 from giambio.task import Task
 from types import FunctionType
-from typing import Union, Iterable
+from typing import Any, Union, Iterable
 from giambio.exceptions import GiambioError
 
 
@@ -39,6 +39,14 @@ def create_trap(method, *args):
 
     data = yield method, *args
     return data
+
+
+async def suspend() -> Any:
+    """
+    Suspends the current task
+    """
+
+    return await create_trap("suspend")
 
 
 async def create_task(coro: FunctionType, pool, *args):

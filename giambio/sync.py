@@ -15,14 +15,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from typing import Any
-from giambio.traps import event_wait, event_set
+from collections import deque
+from typing import Any, Optional
+from giambio.traps import event_wait, event_set, current_task, suspend, schedule_tasks, current_loop
 from giambio.exceptions import GiambioError
 
 
 class Event:
     """
-    A class designed similarly to threading.Event
+    A class designed similarly to threading.Event (not
+    thread-safe though)
     """
 
     def __init__(self):
@@ -53,20 +55,55 @@ class Event:
 
 class Queue:
     """
-    An asynchronous queue similar to asyncio.Queue.
-    NOT thread safe!
+    An asynchronous FIFO queue similar to asyncio.Queue
+    that uses a collections.deque object for the underlying
+    data representation. This queue is *NOT* thread-safe
+
     """
 
-    def __init__(self, maxsize: int):
+    def __init__(self, maxsize: Optional[int] = None):
         """
         Object constructor
         """
 
-        self.events = {}
-        self.container = []
+        self.maxsize = maxsize
+        self.getters = deque()
+        self.putters = deque()
+        self.container = deque(maxlen=maxsize)
 
 
     async def put(self, item: Any):
         """
-
+        Pushes an element onto the queue. If the
+        queue is full, waits until there's 
+        enough space for the queue
         """
+
+        if not self.maxsize or len(self.container) < self.maxsize:
+            if self.getters:
+                task = self.getters.popleft()
+                loop = await current_loop()
+                loop._data[task] = item
+                await schedule_tasks([task])
+            else:
+                self.container.append(item)
+        else:
+            self.putters.append(await current_task())
+            print(self.putters)
+            await suspend()
+    
+
+    async def get(self) -> Any:
+        """
+        Pops an element off the queue. Blocks until
+        an element is put onto it again if the queue
+        is empty
+        """
+
+        if self.container:
+            if self.putters:
+                await schedule_tasks([self.putters.popleft()])
+            return self.container.popleft()
+        else:
+            self.getters.append(await current_task())
+            return await suspend()

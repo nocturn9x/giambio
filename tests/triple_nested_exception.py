@@ -32,7 +32,11 @@ async def main():
     try:
         async with giambio.create_pool() as pool:
             # This pool will run until completion of its
-            # tasks and then propagate the exception
+            # tasks and then propagate the exception. This is
+            # because exception in nested pools are propagated
+            # all the way down first, then the pools above the
+            # one that raised the error first wait for their
+            # children to complete and only then re-raise the original exception
             await pool.spawn(child)
             await pool.spawn(child)
             print("[main] First 2 children spawned, awaiting completion")

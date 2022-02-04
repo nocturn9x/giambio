@@ -30,16 +30,18 @@ class Task:
     """
 
     # The name of the task. Usually this equals self.coroutine.__name__,
-    # but in some cases it falls back to repr(self.coroutine)
+    # but it may fall back to repr(self.coroutine)
     name: str
     # The underlying coroutine object to wrap around a giambio task
     coroutine: Coroutine
-    # The async pool that spawned this task. The one and only task that hasn't
-    # an associated pool is the main entry point which is not available externally
+    # The async pool that spawned this task. The one and only task which may have
+    # no associated pool is the main entry point which is not available externally
+    # (but if a pool is started in the main task, it somewhat becomes part of that
+    # pool as its parent)
     pool: Union["giambio.context.TaskManager", None] = None
     # Whether the task has been cancelled or not. This is True both when the task is
     # explicitly cancelled via its cancel() method or when it is cancelled as a result
-    # of an exception in another task in the same pool
+    # of an exception in another task
     cancelled: bool = False
     # This attribute will be None unless the task raised an error
     exc: BaseException = None
@@ -51,10 +53,10 @@ class Task:
     # time by the event loop, internally. Possible values for this are "init"--
     # when the task has been created but not started running yet--, "run"-- when
     # the task is running synchronous code--, "io"-- when the task is waiting on
-    # an I/O resource--, "sleep"-- when the task is either asleep or waiting on
-    # an event, "crashed"-- when the task has exited because of an exception
-    # and "cancelled" when-- when the task has been explicitly cancelled with
-    # its cancel() method or as a result of an exception
+    # an I/O resource--, "sleep"-- when the task is either asleep, waiting on
+    # an event or otherwise suspended, "crashed"-- when the task has exited because 
+    # of an exception and "cancelled" when-- when the task has been explicitly cancelled 
+    # with its cancel() method or as a result of an exception
     status: str = "init"
     # This attribute counts how many times the task's run() method has been called
     steps: int = 0
@@ -106,13 +108,10 @@ class Task:
         are propagated as well
         """
 
-        task = await giambio.traps.current_task()
-        if task:
+        if task := await giambio.traps.current_task():
             self.joiners.add(task)
-        res = await giambio.traps.join(self)
-        if self.exc:
-            raise self.exc
-        return res
+        return await giambio.traps.join(self)
+
 
     async def cancel(self):
         """
