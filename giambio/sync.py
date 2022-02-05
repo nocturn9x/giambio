@@ -86,10 +86,16 @@ class Queue:
                 loop._data[task] = item
                 await schedule_tasks([task])
             else:
+                # We pop in an else block instead of
+                # always doing it because
+                # by setting loop._data[task]
+                # to the item we've already
+                # kind of returned it and if
+                # we also appended it to the deque
+                # it would be as if it was added twice
                 self.container.append(item)
         else:
             self.putters.append(await current_task())
-            print(self.putters)
             await suspend()
     
 

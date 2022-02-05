@@ -175,6 +175,15 @@ async def want_write(stream):
     await create_trap("register_sock", stream, "write")
 
 
+async def schedule_tasks(tasks: Iterable[Task]):
+    """
+    Schedules a list of tasks for execution. Usuaully
+    used to unsuspend them after they called suspend()
+    """
+
+    await create_trap("schedule_tasks", tasks)
+
+
 async def event_wait(event):
     """
     Notifies the event loop that the current task has to wait
@@ -186,7 +195,7 @@ async def event_wait(event):
         return
     task = await current_task()
     event.waiters.add(task)
-    await create_trap("suspend", task)
+    await create_trap("suspend")
 
 
 async def event_set(event):
@@ -197,11 +206,3 @@ async def event_set(event):
 
     event.set = True
     await schedule_tasks(event.waiters)
-
-
-async def schedule_tasks(tasks: Iterable[Task]):
-    """
-    Schedules a list of tasks for execution
-    """
-
-    await create_trap("schedule_tasks", tasks)

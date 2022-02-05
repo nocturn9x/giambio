@@ -60,7 +60,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
                 logging.info(f"Sending {data!r} to {':'.join(map(str, await client_sock.getpeername()))}")
                 if client_sock != sock:
                     await client_sock.send_all(data)
-            logging.info(f"Echoed back {data!r} to {i} clients")
+            logging.info(f"Sent {data!r} to {i} clients")
     logging.info(f"Connection from {address} closed")
 
 

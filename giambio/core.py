@@ -126,7 +126,10 @@ class AsyncScheduler:
         self.io_skip_limit = io_skip_limit or 5
         # The max. I/O timeout
         self.io_max_timeout = io_max_timeout or 86400
+        # The loop's entry point
         self.entry_point: Optional[Task] = None
+        # Suspended tasks
+        self.suspended: deque = deque()
 
     def __repr__(self):
         """
@@ -159,7 +162,7 @@ class AsyncScheduler:
         Returns True if there is no work to do
         """
 
-        return not any([self.paused, self.run_ready, self.selector.get_map()])
+        return not any([self.paused, self.run_ready, self.selector.get_map(), self.suspended])
 
     def shutdown(self):
         """
@@ -355,6 +358,7 @@ class AsyncScheduler:
         
         if self.current_task.last_io:
             self.io_release_task(self.current_task)
+        self.suspended.append(self.current_task)
 
     def reschedule_running(self):
         """
@@ -450,6 +454,7 @@ class AsyncScheduler:
 
         for task in tasks:
             self.paused.discard(task)
+            self.suspended.remove(task)
         self.run_ready.extend(tasks)
         self.reschedule_running()
 
