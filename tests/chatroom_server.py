@@ -48,7 +48,6 @@ async def handler(sock: AsyncSocket, client_address: tuple):
     async with sock:  # Closes the socket automatically
         await sock.send_all(b"Welcome to the chartoom pal, start typing and press enter!\n")
         while True:
-            await sock.send_all(b"-> ")
             data = await sock.receive(1024)
             if not data:
                 break
@@ -62,6 +61,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
                     await client_sock.send_all(data)
             logging.info(f"Sent {data!r} to {i} clients")
     logging.info(f"Connection from {address} closed")
+    clients.remove(sock)
 
 
 if __name__ == "__main__":

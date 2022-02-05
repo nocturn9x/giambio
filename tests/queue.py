@@ -28,5 +28,5 @@ async def main(q: giambio.Queue, n: int):
     
 
 
-queue = giambio.Queue(1)
+queue = giambio.Queue()
 giambio.run(main, queue, 5, debugger=())

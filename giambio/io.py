@@ -191,6 +191,8 @@ class AsyncSocket:
         Wrapper socket method
         """
 
+        if not hasattr(self.sock, "do_handshake"):
+            return
         while True:
             try:
                 return self.sock.do_handshake()
