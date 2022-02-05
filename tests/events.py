@@ -8,9 +8,9 @@ import giambio
 async def child(ev: giambio.Event, pause: int):
     print("[child] Child is alive! Going to wait until notified")
     start_total = giambio.clock()
-    await ev.wait()
+    data = await ev.wait()
     end_pause = giambio.clock() - start_total
-    print(f"[child] Parent set the event, exiting in {pause} seconds")
+    print(f"[child] Parent set the event with value {data}, exiting in {pause} seconds")
     start_sleep = giambio.clock()
     await giambio.sleep(pause)
     end_sleep = giambio.clock() - start_sleep
@@ -26,7 +26,7 @@ async def parent(pause: int = 1):
         start = giambio.clock()
         print(f"[parent] Sleeping {pause} second(s) before setting the event")
         await giambio.sleep(pause)
-        await event.trigger()
+        await event.trigger(True)
         print("[parent] Event set, awaiting child completion")
     end = giambio.clock() - start
     print(f"[parent] Child exited in {end:.2f} seconds")

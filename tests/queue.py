@@ -6,7 +6,6 @@ async def producer(q: giambio.Queue, n: int):
     for i in range(n):
         await q.put(i)
         print(f"Produced {i}")
-        await giambio.sleep(1)
     await q.put(None)
     print("Producer done")
 
@@ -18,6 +17,7 @@ async def consumer(q: giambio.Queue):
             print("Consumer done")
             break
         print(f"Consumed {item}")
+        await giambio.sleep(1)
         
 
 

@@ -195,7 +195,7 @@ async def event_wait(event):
         return
     task = await current_task()
     event.waiters.add(task)
-    await create_trap("suspend")
+    return await create_trap("suspend")
 
 
 async def event_set(event):
@@ -205,4 +205,7 @@ async def event_set(event):
     """
 
     event.set = True
+    loop = await current_loop()
+    for waiter in event.waiters:
+        loop._data[waiter] = event.value
     await schedule_tasks(event.waiters)

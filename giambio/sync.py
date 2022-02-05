@@ -34,8 +34,9 @@ class Event:
 
         self.set = False
         self.waiters = set()
+        self.value = None
 
-    async def trigger(self):
+    async def trigger(self, value: Optional[Any] = None):
         """
         Sets the event, waking up all tasks that called
         pause() on it
@@ -43,6 +44,7 @@ class Event:
 
         if self.set:
             raise GiambioError("The event has already been set")
+        self.value = value
         await event_set(self)
 
     async def wait(self):
@@ -50,15 +52,15 @@ class Event:
         Waits until the event is set
         """
 
-        await event_wait(self)
+        return await event_wait(self)
 
 
 class Queue:
     """
     An asynchronous FIFO queue similar to asyncio.Queue
     that uses a collections.deque object for the underlying
-    data representation. This queue is *NOT* thread-safe
-
+    data representation. This queue is *NOT* thread-safe as
+    it is based on giambio's Event mechanism
     """
 
     def __init__(self, maxsize: Optional[int] = None):
@@ -80,23 +82,12 @@ class Queue:
         """
 
         if not self.maxsize or len(self.container) < self.maxsize:
+            self.container.append(item)
             if self.getters:
-                task = self.getters.popleft()
-                loop = await current_loop()
-                loop._data[task] = item
-                await schedule_tasks([task])
-            else:
-                # We pop in an else block instead of
-                # always doing it because
-                # by setting loop._data[task]
-                # to the item we've already
-                # kind of returned it and if
-                # we also appended it to the deque
-                # it would be as if it was added twice
-                self.container.append(item)
+                await self.getters.popleft().trigger(self.container.popleft())
         else:
-            self.putters.append(await current_task())
-            await suspend()
+            self.putters.append(Event())
+            await self.putters[-1].wait()
     
 
     async def get(self) -> Any:
@@ -108,8 +99,8 @@ class Queue:
 
         if self.container:
             if self.putters:
-                await schedule_tasks([self.putters.popleft()])
+                await self.putters.popleft().trigger()
             return self.container.popleft()
         else:
-            self.getters.append(await current_task())
-            return await suspend()
+            self.getters.append(Event())
+            return await self.getters[-1].wait()
