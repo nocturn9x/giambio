@@ -437,7 +437,10 @@ class AsyncScheduler:
         while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
             pool.timed_out = True
-            if not pool.tasks and self.current_task is self.entry_point:
+            if self.current_task is self.entry_point:
+                self.paused.discard(self.current_task)
+                self.io_release_task(self.current_task)
+                self.reschedule_running()
                 self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
             for task in pool.tasks:
                 if not task.done():
@@ -641,14 +644,16 @@ class AsyncScheduler:
         task.joined = True
         if task.finished or task.cancelled:
             if not task.cancelled:
+                # This way join() returns the
+                # task's return value
+                for joiner in task.joiners:
+                    self._data[joiner] = task.result
                 self.debugger.on_task_exit(task)
             if task.last_io:
                 self.io_release_task(task)
             # If the pool has finished executing or we're at the first parent
             # task that kicked the loop, we can safely reschedule the parent(s)
-            if task.pool is None:
-                return
-            if task.pool.done():
+            if not task.pool or task.pool.done():
                 self.reschedule_joiners(task)
         elif task.exc:
             task.status = "crashed"
