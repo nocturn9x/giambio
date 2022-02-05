@@ -45,5 +45,5 @@ __all__ = [
     "skip_after",
     "task",
     "io",
-    "socket"
+    "socket",
 ]

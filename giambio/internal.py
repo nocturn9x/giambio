@@ -44,6 +44,13 @@ class TimeQueue:
         self.sequence = 0
         self.container: List[Tuple[float, int, Task]] = []
 
+    def __len__(self):
+        """
+        Returns len(self)
+        """
+
+        return len(self.container)
+
     def __contains__(self, item: Task):
         """
         Implements item in self. This method behaves
@@ -262,6 +269,13 @@ class DeadlinesQueue:
         """
 
         return f"DeadlinesQueue({self.container})"
+
+    def __len__(self):
+        """
+        Returns len(self)
+        """
+
+        return len(self.container)
 
     def put(self, pool: "giambio.context.TaskManager"):
         """

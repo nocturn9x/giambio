@@ -73,11 +73,10 @@ class Queue:
         self.putters = deque()
         self.container = deque(maxlen=maxsize)
 
-
     async def put(self, item: Any):
         """
         Pushes an element onto the queue. If the
-        queue is full, waits until there's 
+        queue is full, waits until there's
         enough space for the queue
         """
 
@@ -88,7 +87,6 @@ class Queue:
         else:
             self.putters.append(Event())
             await self.putters[-1].wait()
-    
 
     async def get(self) -> Any:
         """

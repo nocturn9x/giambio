@@ -54,8 +54,8 @@ class Task:
     # when the task has been created but not started running yet--, "run"-- when
     # the task is running synchronous code--, "io"-- when the task is waiting on
     # an I/O resource--, "sleep"-- when the task is either asleep, waiting on
-    # an event or otherwise suspended, "crashed"-- when the task has exited because 
-    # of an exception and "cancelled" when-- when the task has been explicitly cancelled 
+    # an event or otherwise suspended, "crashed"-- when the task has exited because
+    # of an exception and "cancelled" when-- when the task has been explicitly cancelled
     # with its cancel() method or as a result of an exception
     status: str = "init"
     # This attribute counts how many times the task's run() method has been called
@@ -111,7 +111,6 @@ class Task:
         if task := await giambio.traps.current_task():
             self.joiners.add(task)
         return await giambio.traps.join(self)
-
 
     async def cancel(self):
         """

@@ -18,12 +18,13 @@ limitations under the License.
 
 import inspect
 import threading
+from typing import Callable, Coroutine, Any, Union
+
 from giambio.core import AsyncScheduler
 from giambio.exceptions import GiambioError
 from giambio.context import TaskManager
 from timeit import default_timer
 from giambio.util.debug import BaseDebugger
-from types import FunctionType
 
 
 thread_local = threading.local()
@@ -41,7 +42,7 @@ def get_event_loop():
         raise GiambioError("giambio is not running") from None
 
 
-def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
+def new_event_loop(debugger: BaseDebugger, clock: Callable):
     """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
@@ -62,7 +63,7 @@ def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
             thread_local.loop = AsyncScheduler(clock, debugger)
 
 
-def run(func: FunctionType, *args, **kwargs):
+def run(func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs):
     """
     Starts the event loop from a synchronous entry point
     """
@@ -95,23 +96,16 @@ def create_pool():
     return TaskManager()
 
 
-def with_timeout(timeout: int or float):
+def with_timeout(timeout: Union[int, float]):
     """
     Creates an async pool with an associated timeout
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    mgr = TaskManager(timeout)
-    loop = get_event_loop()
-    if loop.current_task.pool is None:
-        loop.current_pool = mgr
-        loop.current_task.pool = mgr
-        loop.current_task.next_deadline = mgr.timeout or 0.0
-        loop.deadlines.put(mgr)
-    return mgr
+    return TaskManager(timeout)
 
 
-def skip_after(timeout: int or float):
+def skip_after(timeout: Union[int, float]):
     """
     Creates an async pool with an associated timeout, but
     without raising a TooSlowError exception. The pool
@@ -119,11 +113,4 @@ def skip_after(timeout: int or float):
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    mgr = TaskManager(timeout, False)
-    loop = get_event_loop()
-    if loop.current_task.pool is None:
-        loop.current_pool = mgr
-        loop.current_task.pool = mgr
-        loop.current_task.next_deadline = mgr.timeout or 0.0
-        loop.deadlines.put(mgr)
-    return mgr
+    return TaskManager(timeout, False)

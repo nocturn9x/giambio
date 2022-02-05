@@ -16,9 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import types
 import giambio
-from typing import List, Optional
+from typing import List, Optional, Callable, Coroutine, Any
 
 
 class TaskManager:
@@ -55,7 +54,7 @@ class TaskManager:
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
         self.raise_on_timeout: bool = raise_on_timeout
 
-    async def spawn(self, func: types.FunctionType, *args, **kwargs) -> "giambio.task.Task":
+    async def spawn(self, func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> "giambio.task.Task":
         """
         Spawns a child task
         """

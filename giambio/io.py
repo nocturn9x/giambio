@@ -244,7 +244,7 @@ class AsyncSocket:
                 await want_write(self.sock)
             except WantRead:
                 await want_read(self.sock)
-    
+
     async def getpeername(self):
         """
         Wrapper socket method

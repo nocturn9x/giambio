@@ -23,15 +23,15 @@ async def serve(bind_address: tuple):
     logging.info(f"Serving asynchronously at {bind_address[0]}:{bind_address[1]}")
     async with giambio.create_pool() as pool:
         async with sock:
-                while True:
-                    try:
-                        conn, address_tuple = await sock.accept()
-                        clients.append(conn)
-                        logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
-                        await pool.spawn(handler, conn, address_tuple)
-                    except Exception as err:
-                        # Because exceptions just *work*
-                        logging.info(f"{address_tuple[0]}:{address_tuple[1]} has raised {type(err).__name__}: {err}")
+            while True:
+                try:
+                    conn, address_tuple = await sock.accept()
+                    clients.append(conn)
+                    logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
+                    await pool.spawn(handler, conn, address_tuple)
+                except Exception as err:
+                    # Because exceptions just *work*
+                    logging.info(f"{address_tuple[0]}:{address_tuple[1]} has raised {type(err).__name__}: {err}")
 
 
 async def handler(sock: AsyncSocket, client_address: tuple):

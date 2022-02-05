@@ -19,7 +19,7 @@ async def receiver(sock: giambio.socket.AsyncSocket, q: giambio.Queue):
         data, rest = data.split(b"\n", maxsplit=2)
         buffer = b"".join(rest)
         await q.put((1, data.decode()))
-        data = buffer        
+        data = buffer
 
 
 async def main(host: Tuple[str, int]):

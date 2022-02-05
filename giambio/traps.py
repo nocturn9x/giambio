@@ -24,8 +24,7 @@ limitations under the License.
 import types
 import inspect
 from giambio.task import Task
-from types import FunctionType
-from typing import Any, Union, Iterable
+from typing import Any, Union, Iterable, Coroutine, Callable
 from giambio.exceptions import GiambioError
 
 
@@ -49,7 +48,7 @@ async def suspend() -> Any:
     return await create_trap("suspend")
 
 
-async def create_task(coro: FunctionType, pool, *args):
+async def create_task(coro: Callable[..., Coroutine[Any, Any, Any]], pool, *args):
     """
     Spawns a new task in the current event loop from a bare coroutine
     function. All extra positional arguments are passed to the function
