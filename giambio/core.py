@@ -644,6 +644,8 @@ class AsyncScheduler:
                 self.debugger.on_task_exit(task)
             if task.last_io:
                 self.io_release_task(task)
+            if task in self.suspended:
+                self.suspended.remove(task)
             # If the pool has finished executing or we're at the first parent
             # task that kicked the loop, we can safely reschedule the parent(s)
             if task.pool is None:
@@ -651,6 +653,8 @@ class AsyncScheduler:
             if task.pool.done():
                 self.reschedule_joiners(task)
         elif task.exc:
+            if task in self.suspended:
+                self.suspended.remove(task)
             task.status = "crashed"
             if task.exc.__traceback__:
                 # TODO: We might want to do a bit more complex traceback hacking to remove any extra
