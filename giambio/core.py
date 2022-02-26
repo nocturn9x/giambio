@@ -95,7 +95,7 @@ class AsyncScheduler:
             or type(
                 "DumbDebugger",
                 (object,),
-                {"__getattr__": lambda *args: lambda *arg: None},
+                {"__getattr__": lambda *_: lambda *_: None},
             )()
         )
         # All tasks the loop has
@@ -151,6 +151,8 @@ class AsyncScheduler:
             "_data",
             "io_skip_limit",
             "io_max_timeout",
+            "suspended",
+            "entry_point"
         }
         data = ", ".join(
             name + "=" + str(value) for name, value in zip(fields, (getattr(self, field) for field in fields))
@@ -359,6 +361,7 @@ class AsyncScheduler:
         if self.current_task.last_io:
             self.io_release_task(self.current_task)
         self.suspended.append(self.current_task)
+
 
     def reschedule_running(self):
         """

@@ -195,7 +195,7 @@ async def event_wait(event):
         return
     task = await current_task()
     event.waiters.add(task)
-    return await create_trap("suspend")
+    return await suspend()
 
 
 async def event_set(event):

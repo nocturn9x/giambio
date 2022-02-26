@@ -18,15 +18,14 @@ async def consumer(q: giambio.Queue):
             break
         print(f"Consumed {item}")
         await giambio.sleep(1)
-        
 
 
 async def main(q: giambio.Queue, n: int):
     async with giambio.create_pool() as pool:
-        await pool.spawn(consumer, q)
         await pool.spawn(producer, q, n)
+        await pool.spawn(consumer, q)
     
 
 
-queue = giambio.Queue()
+queue = giambio.Queue(2)
 giambio.run(main, queue, 5, debugger=())

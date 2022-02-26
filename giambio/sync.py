@@ -17,7 +17,7 @@ limitations under the License.
 """
 from collections import deque
 from typing import Any, Optional
-from giambio.traps import event_wait, event_set, current_task, suspend, schedule_tasks, current_loop
+from giambio.traps import event_wait, event_set
 from giambio.exceptions import GiambioError
 
 
@@ -71,7 +71,7 @@ class Queue:
         self.maxsize = maxsize
         self.getters = deque()
         self.putters = deque()
-        self.container = deque(maxlen=maxsize)
+        self.container = deque()
 
 
     async def put(self, item: Any):
@@ -81,14 +81,15 @@ class Queue:
         enough space for the queue
         """
 
-        if not self.maxsize or len(self.container) < self.maxsize:
+        if self.maxsize and len(self.container) < self.maxsize:
             self.container.append(item)
             if self.getters:
                 await self.getters.popleft().trigger(self.container.popleft())
         else:
-            self.putters.append(Event())
-            await self.putters[-1].wait()
-    
+            ev = Event()
+            self.putters.append(ev)
+            await ev.wait()
+            self.container.append(item)
 
     async def get(self) -> Any:
         """
@@ -102,5 +103,6 @@ class Queue:
                 await self.putters.popleft().trigger()
             return self.container.popleft()
         else:
-            self.getters.append(Event())
-            return await self.getters[-1].wait()
+            ev = Event()
+            self.getters.append(ev)
+            return await ev.wait()
