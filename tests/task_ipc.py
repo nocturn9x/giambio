@@ -15,19 +15,19 @@ async def task(c: giambio.MemoryChannel, name: str):
         await giambio.sleep(1)
 
 
-async def main(channel: giambio.MemoryChannel):
-    print("[main] Spawning workers")
-    async with giambio.skip_after(5) as pool:
+async def main(channel: giambio.MemoryChannel, delay: int):
+    print(f"[main] Spawning workers, exiting in {delay} seconds")
+    async with giambio.skip_after(delay) as pool:
         await pool.spawn(task, channel, "one")
         await pool.spawn(task, channel, "two")
         await pool.spawn(task, channel, "three")
     await channel.close()
     print(f"[main] Operation complete, channel closed")
     if await channel.pending():
-        print(f"[main] Channel has {len(channel.buffer)} leftover packets of data, clearing it")
+        print(f"[main] Channel has {len(channel.buffer)} leftover packet{'s' if len(channel.buffer) > 1 else ''} of data, clearing it")
         while await channel.pending():
-            print(f"Cleared {await channel.read()!r}")
+            print(f"[main] Cleared {await channel.read()!r}")
 
 
 channel = giambio.MemoryChannel()
-giambio.run(main, channel, debugger=())
+giambio.run(main, channel, 6, debugger=())
