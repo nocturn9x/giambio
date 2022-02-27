@@ -92,7 +92,7 @@ class TaskManager:
             if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
                 return True
         except giambio.exceptions.TooSlowError:
-            if not self.raise_on_timeout:
+            if self.raise_on_timeout:
                 raise
             
     async def cancel(self):

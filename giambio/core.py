@@ -445,7 +445,8 @@ class AsyncScheduler:
             for task in pool.tasks:
                 self.join(task)
             self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
-
+            if pool.entry_point is self.entry_point:
+                self.run_ready.append(self.entry_point)
 
     def schedule_tasks(self, tasks: List[Task]):
         """

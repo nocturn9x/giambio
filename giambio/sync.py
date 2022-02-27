@@ -15,12 +15,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from socket import socketpair
 from abc import ABC, abstractmethod
-import abc
 from collections import deque
 from typing import Any, Optional
 from giambio.traps import event_wait, event_set
 from giambio.exceptions import GiambioError
+from giambio.socket import wrap_socket
 
 
 class Event:
@@ -258,5 +259,69 @@ class MemoryChannel(Channel):
 class NetworkChannel(Channel):
     """
     A two-way communication channel between tasks based
-    on giambio's I/O mechanisms. This variant of a channel
+    on giambio's I/O mechanisms instead of in-memory queues
     """
+
+    def __init__(self):
+        """
+        Public object constructor
+        """
+
+        super().__init__(None)
+        # We use a socket as our buffer instead of a queue
+        sockets = socketpair()
+        self.reader = wrap_socket(sockets[0])
+        self.writer = wrap_socket(sockets[1])
+        self._internal_buffer = b""
+
+
+    async def write(self, data: bytes):
+        """
+        Writes data to the channel. Blocks if the internal
+        socket is not currently available. Does nothing
+        if the channel has been closed
+        """
+
+        if self.closed:
+            return
+        await self.writer.send_all(data)
+
+    async def read(self, size: int):
+        """
+        Reads exactly size bytes from the channel. Blocks until
+        enough data arrives. Extra data is cached and used on the
+        next read
+        """
+
+        data = self._internal_buffer
+        while len(data) < size:
+            data += await self.reader.receive(size)
+        self._internal_buffer = data[size:]
+        data = data[:size]
+        return data
+    
+    async def close(self):
+        """
+        Closes the memory channel. Any underlying
+        data is flushed out of the internal socket
+        and is lost
+        """
+
+        self.closed = True
+        await self.reader.close()
+        await self.writer.close()
+    
+    async def pending(self):
+        """
+        Returns if there's pending
+        data to be read
+        """
+        
+        # TODO: Ugly!
+        if self.closed:
+            return False
+        try:
+            self._internal_buffer += self.reader.sock.recv(1)
+        except BlockingIOError:
+            return False
+        return True
