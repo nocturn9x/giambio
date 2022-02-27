@@ -15,6 +15,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from abc import ABC, abstractmethod
+import abc
 from collections import deque
 from typing import Any, Optional
 from giambio.traps import event_wait, event_set
@@ -145,7 +147,60 @@ class Queue:
         self.putters.clear()
 
 
-class MemoryChannel:
+class Channel(ABC):
+    """
+    A generic, two-way, full-duplex communication channel between
+    tasks. This is just an abstract base class!
+    """
+
+    def __init__(self, maxsize: Optional[int] = None):
+        """
+        Public object constructor
+        """
+
+        self.maxsize = maxsize
+        self.closed = False
+    
+    @abstractmethod
+    async def write(self, data: str):
+        """
+        Writes data to the channel. Blocks if the internal
+        queue is full until a spot is available. Does nothing
+        if the channel has been closed
+        """
+
+        return NotImplemented
+
+    @abstractmethod
+    async def read(self):
+        """
+        Reads data from the channel. Blocks until
+        a message arrives or returns immediately if
+        one is already waiting
+        """
+
+        return NotImplemented
+    
+    @abstractmethod
+    async def close(self):
+        """
+        Closes the memory channel. Any underlying
+        data is left for other tasks to read
+        """
+
+        return NotImplemented
+   
+    @abstractmethod 
+    async def pending(self):
+        """
+        Returns if there's pending
+        data to be read
+        """
+
+        return NotImplemented
+
+
+class MemoryChannel(Channel):
     """
     A two-way communication channel between tasks based
     on giambio's queueing mechanism. Operations on this
@@ -158,16 +213,16 @@ class MemoryChannel:
         Public object constructor
         """
 
+        super().__init__(maxsize)
         # We use a queue as our buffer
         self.buffer = Queue(maxsize=maxsize)
-        self.maxsize = maxsize
-        self.closed = False
 
 
     async def write(self, data: str):
         """
         Writes data to the channel. Blocks if the internal
-        queue is full until a spot is available
+        queue is full until a spot is available. Does nothing
+        if the channel has been closed
         """
 
         if self.closed:
@@ -186,7 +241,7 @@ class MemoryChannel:
     async def close(self):
         """
         Closes the memory channel. Any underlying
-        data is left for clients to read
+        data is left for other tasks to read
         """
 
         self.closed = True
@@ -198,3 +253,10 @@ class MemoryChannel:
         """
 
         return bool(len(self.buffer))
+
+
+class NetworkChannel(Channel):
+    """
+    A two-way communication channel between tasks based
+    on giambio's I/O mechanisms. This variant of a channel
+    """
