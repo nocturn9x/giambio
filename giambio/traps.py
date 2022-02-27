@@ -150,7 +150,7 @@ async def cancel(task):
     """
 
     await create_trap("cancel", task)
-    assert task.cancelled, f"Task ignored CancelledError"
+    assert task.done(), f"Task ignored CancelledError"
 
 
 async def want_read(stream):
@@ -198,13 +198,14 @@ async def event_wait(event):
     return await suspend()
 
 
-async def event_set(event):
+async def event_set(event, value):
     """
     Sets the given event and reawakens its
     waiters
     """
 
     event.set = True
+    event.value = value
     loop = await current_loop()
     for waiter in event.waiters:
         loop._data[waiter] = event.value

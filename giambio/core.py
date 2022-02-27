@@ -360,6 +360,7 @@ class AsyncScheduler:
         
         if self.current_task.last_io:
             self.io_release_task(self.current_task)
+        self.current_task.status = "sleep"
         self.suspended.append(self.current_task)
 
 
@@ -728,6 +729,8 @@ class AsyncScheduler:
                 self.io_release_task(task)
             elif task.status == "sleep":
                 self.paused.discard(task)
+                if task in self.suspended:
+                    self.suspended.remove(task)
             try:
                 self.do_cancel(task)
             except CancelledError as cancel:

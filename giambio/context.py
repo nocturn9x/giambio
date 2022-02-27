@@ -78,14 +78,17 @@ class TaskManager:
         all the tasks spawned inside the pool
         """
 
-        for task in self.tasks:
-            # This forces the interpreter to stop at the
-            # end of the block and wait for all
-            # children to exit
-            await task.join()
-            self.tasks.remove(task)
-        self._proper_init = False
-        if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
+        try:
+            for task in self.tasks:
+                # This forces the interpreter to stop at the
+                # end of the block and wait for all
+                # children to exit
+                await task.join()
+                self.tasks.remove(task)
+            self._proper_init = False
+            if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
+                return True
+        except giambio.exceptions.TooSlowError:
             return True
 
     async def cancel(self):
