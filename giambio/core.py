@@ -341,7 +341,7 @@ class AsyncScheduler:
 
         if self.selector.get_map():
             for k in filter(
-                lambda o: o.data == self.current_task,
+                lambda o: o.data == task,
                 dict(self.selector.get_map()).values(),
             ):
                 self.io_release(k.fileobj)
@@ -358,7 +358,7 @@ class AsyncScheduler:
         before it's due
         """
         
-        if self.current_task.last_io:
+        if self.current_task.last_io or self.current_task.status == "io":
             self.io_release_task(self.current_task)
         self.current_task.status = "sleep"
         self.suspended.append(self.current_task)
@@ -441,13 +441,11 @@ class AsyncScheduler:
         while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
             pool.timed_out = True
-            if not pool.tasks and self.current_task is self.entry_point:
-                self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
+            self.cancel_pool(pool)
             for task in pool.tasks:
-                if not task.done():
-                    self.paused.discard(task)
-                    self.io_release_task(task)
-                    self.handle_task_exit(task, partial(task.throw, TooSlowError(task)))
+                self.join(task)
+            self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
+
 
     def schedule_tasks(self, tasks: List[Task]):
         """
@@ -554,9 +552,12 @@ class AsyncScheduler:
         self.run_ready.append(entry)
         self.debugger.on_start()
         if loop:
-            self.run()
-            self.has_ran = True
-            self.debugger.on_exit()
+            try:
+                self.run()
+            finally:
+                self.has_ran = True
+                self.close()
+                self.debugger.on_exit()
 
     def cancel_pool(self, pool: TaskManager) -> bool:
         """
@@ -729,8 +730,8 @@ class AsyncScheduler:
                 self.io_release_task(task)
             elif task.status == "sleep":
                 self.paused.discard(task)
-                if task in self.suspended:
-                    self.suspended.remove(task)
+            if task in self.suspended:
+                self.suspended.remove(task)
             try:
                 self.do_cancel(task)
             except CancelledError as cancel:
@@ -747,7 +748,6 @@ class AsyncScheduler:
                 task.cancel_pending = False
                 task.cancelled = True
                 task.status = "cancelled"
-                self.io_release_task(self.current_task)
                 self.debugger.after_cancel(task)
                 self.tasks.remove(task)
             else:
@@ -758,12 +758,12 @@ class AsyncScheduler:
     def register_sock(self, sock, evt_type: str):
         """
         Registers the given socket inside the
-        selector to perform I/0 multiplexing
+        selector to perform I/O multiplexing
 
         :param sock: The socket on which a read or write operation
-        has to be performed
+            has to be performed
         :param evt_type: The type of event to perform on the given
-        socket, either "read" or "write"
+            socket, either "read" or "write"
         :type evt_type: str
         """
 
@@ -797,5 +797,8 @@ class AsyncScheduler:
             try:
                 self.selector.register(sock, evt, self.current_task)
             except KeyError:
-                # The socket is already registered doing something else
-                raise ResourceBusy("The given socket is being read/written by another task") from None
+                # The socket is already registered doing something else, we
+                # modify the socket instead (or maybe not?)
+                self.selector.modify(sock, evt, self.current_task)
+                # TODO: Does this break stuff?
+                # raise ResourceBusy("The given socket is being read/written by another task") from None

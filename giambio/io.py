@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import giambio
 from giambio.exceptions import ResourceClosed
 from giambio.traps import want_write, want_read, io_release
 
@@ -121,6 +122,7 @@ class AsyncSocket:
 
         if self.sock:
             self.sock.shutdown(how)
+            await giambio.sleep(0)  # Checkpoint
 
     async def bind(self, addr: tuple):
         """
