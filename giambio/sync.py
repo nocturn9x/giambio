@@ -19,9 +19,10 @@ from socket import socketpair
 from abc import ABC, abstractmethod
 from collections import deque
 from typing import Any, Optional
-from giambio.traps import event_wait, event_set
+from giambio.traps import event_wait, event_set, current_task
 from giambio.exceptions import GiambioError
 from giambio.socket import wrap_socket
+from giambio.task import Task
 
 
 class Event:
@@ -72,7 +73,11 @@ class Queue:
         """
 
         self.maxsize = maxsize
+        # Stores event objects for tasks wanting to
+        # get items from the queue
         self.getters = deque()
+        # Stores event objects for tasks wanting to 
+        # put items on the queue
         self.putters = deque()
         self.container = deque()
 
@@ -84,16 +89,19 @@ class Queue:
         return len(self.container)
     
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({f', '.join(map(str, self.container))})"
+
     async def __aiter__(self):
         """
-        Implements the iterator protocol
+        Implements the asynchronous iterator protocol
         """
 
         return self
     
     async def __anext__(self):
         """
-        Implements the iterator protocol
+        Implements the asynchronous iterator protocol
         """
 
         return await self.get()
@@ -325,3 +333,56 @@ class NetworkChannel(Channel):
         except BlockingIOError:
             return False
         return True
+
+
+class Lock:
+    """
+    A simple single-owner lock
+    """
+
+    def __init__(self):
+        """
+        Public constructor
+        """
+
+        self.owner: Optional[Task] = None
+        self.tasks: deque[Event] = deque()
+
+    async def acquire(self):
+        """
+        Acquires the lock
+        """
+
+        task = await current_task()
+        if self.owner is None:
+            self.owner = task
+        elif task is self.owner:
+            raise RuntimeError("lock is already acquired by current task")
+        elif self.owner is not task:
+            self.tasks.append(Event())
+            await self.tasks[-1].wait()
+            self.owner = task
+
+    async def release(self):
+        """
+        Releases the lock
+        """
+
+        task = await current_task()
+        if self.owner is None:
+            raise RuntimeError("lock is not acquired")
+        elif self.owner is not task:
+            raise RuntimeError("lock can only released by its owner")
+        elif self.tasks:
+            await self.tasks.popleft().trigger()
+        else:
+            self.owner = None
+
+
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+    
+
+    async def __aexit__(self, *args):
+        await self.release()

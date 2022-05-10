@@ -130,6 +130,7 @@ class AsyncScheduler:
         self.entry_point: Optional[Task] = None
         # Suspended tasks
         self.suspended: deque = deque()
+    
 
     def __repr__(self):
         """
@@ -209,7 +210,10 @@ class AsyncScheduler:
                 # after it is set, but it makes the implementation easier
                 if not self.current_pool and self.current_task.pool:
                     self.current_pool = self.current_task.pool
-                self.deadlines.put(self.current_pool)
+                pool = self.current_pool
+                while pool:
+                    self.deadlines.put(pool)
+                    pool = self.current_pool.enclosed_pool
                 # If there are no actively running tasks, we start by
                 # checking for I/O. This method will wait for I/O until
                 # the closest deadline to avoid starving sleeping tasks
@@ -288,16 +292,18 @@ class AsyncScheduler:
         account, that's self.run's job!
         """
 
-        data = None
         # Sets the currently running task
         self.current_task = self.run_ready.popleft()
         if self.current_task.done():
             # We need to make sure we don't try to execute
             # exited tasks that are on the running queue
             return
-        if not self.current_pool and self.current_task.pool:
+        if not self.current_pool:
             self.current_pool = self.current_task.pool
-        self.deadlines.put(self.current_pool)
+        pool = self.current_pool
+        while pool:
+            self.deadlines.put(pool)
+            pool = self.current_pool.enclosed_pool
         self.debugger.before_task_step(self.current_task)
         # Some debugging and internal chatter here
         self.current_task.status = "run"
@@ -362,7 +368,6 @@ class AsyncScheduler:
             self.io_release_task(self.current_task)
         self.current_task.status = "sleep"
         self.suspended.append(self.current_task)
-
 
     def reschedule_running(self):
         """
@@ -444,8 +449,8 @@ class AsyncScheduler:
             self.cancel_pool(pool)
             for task in pool.tasks:
                 self.join(task)
-            self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
             if pool.entry_point is self.entry_point:
+                self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
                 self.run_ready.append(self.entry_point)
 
     def schedule_tasks(self, tasks: List[Task]):
@@ -479,6 +484,7 @@ class AsyncScheduler:
             slept = self.clock() - task.sleep_start
             self.run_ready.append(task)
             self.debugger.after_sleep(task, slept)
+
 
     def get_closest_deadline(self) -> float:
         """
@@ -619,6 +625,16 @@ class AsyncScheduler:
         elif not self.done():
             raise GiambioError("event loop not terminated, call this method with ensure_done=False to forcefully exit")
         self.shutdown()
+        # We reset the event loop's state
+        self.tasks = []
+        self.entry_point = None
+        self.current_pool = None
+        self.current_task = None
+        self.paused = TimeQueue(self.clock)
+        self.deadlines = DeadlinesQueue()
+        self.run_ready = deque()
+        self.suspended = deque()
+
 
     def reschedule_joiners(self, task: Task):
         """
