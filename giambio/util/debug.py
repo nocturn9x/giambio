@@ -31,7 +31,7 @@ class BaseDebugger(ABC):
         loop starts executing
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def on_exit(self):
@@ -40,7 +40,7 @@ class BaseDebugger(ABC):
         loop exits entirely (all tasks completed)
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def on_task_schedule(self, task: Task, delay: float):
@@ -49,14 +49,14 @@ class BaseDebugger(ABC):
         scheduled (not spawned)
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         :param delay: The delay, in seconds, after which
-        the task will start executing
+            the task will start executing
         :type delay: float
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def on_task_spawn(self, task: Task):
@@ -65,11 +65,11 @@ class BaseDebugger(ABC):
         spawned
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def on_task_exit(self, task: Task):
@@ -77,11 +77,11 @@ class BaseDebugger(ABC):
         This method is called when a task exits
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def before_task_step(self, task: Task):
@@ -90,11 +90,11 @@ class BaseDebugger(ABC):
         calling a task's run() method
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def after_task_step(self, task: Task):
@@ -103,11 +103,11 @@ class BaseDebugger(ABC):
         calling a task's run() method
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def before_sleep(self, task: Task, seconds: float):
@@ -116,14 +116,14 @@ class BaseDebugger(ABC):
         to sleep
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         :param seconds: The amount of seconds the
-        task wants to sleep
+            task wants to sleep
         :type seconds: int
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def after_sleep(self, task: Task, seconds: float):
@@ -132,14 +132,14 @@ class BaseDebugger(ABC):
         awakes from sleeping
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         :param seconds: The amount of seconds the
-        task actually slept
+            task actually slept
         :type seconds: float
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def before_io(self, timeout: float):
@@ -148,12 +148,12 @@ class BaseDebugger(ABC):
         the event loop checks for I/O events
 
         :param timeout: The max. amount of seconds
-        that the loop will hang when using the select()
-        system call
+            that the loop will hang when using the select()
+            system call
         :type timeout: float
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def after_io(self, timeout: float):
@@ -162,12 +162,12 @@ class BaseDebugger(ABC):
         the event loop has checked for I/O events
 
         :param timeout: The actual amount of seconds
-        that the loop has hung when using the select()
-        system call
+            that the loop has hung when using the select()
+            system call
         :type timeout: float
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def before_cancel(self, task: Task):
@@ -176,11 +176,11 @@ class BaseDebugger(ABC):
         gets cancelled
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def after_cancel(self, task: Task) -> object:
@@ -189,11 +189,11 @@ class BaseDebugger(ABC):
         gets cancelled
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         """
 
-        raise NotImplementedError
+        return NotImplemented
 
     @abstractmethod
     def on_exception_raised(self, task: Task, exc: BaseException):
@@ -202,10 +202,10 @@ class BaseDebugger(ABC):
         has raised an exception
 
         :param task: The Task object representing a
-        giambio Task and wrapping a coroutine
+            giambio Task and wrapping a coroutine
         :type task: :class: giambio.objects.Task
         :param exc: The exception that was raised
         :type exc: BaseException
         """
 
-        raise NotImplementedError
+        return NotImplemented

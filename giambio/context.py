@@ -16,8 +16,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from lib2to3.pgen2.token import OP
+import types
 import giambio
-from typing import List, Optional, Callable, Coroutine, Any
+from typing import List, Optional
 
 
 class TaskManager:
@@ -53,8 +55,9 @@ class TaskManager:
         self._proper_init = False
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
         self.raise_on_timeout: bool = raise_on_timeout
+        self.entry_point: Optional[Task] = None
 
-    async def spawn(self, func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> "giambio.task.Task":
+    async def spawn(self, func: types.FunctionType, *args, **kwargs) -> "giambio.task.Task":
         """
         Spawns a child task
         """
@@ -69,6 +72,7 @@ class TaskManager:
         """
 
         self._proper_init = True
+        self.entry_point = await giambio.traps.current_task()
         return self
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
@@ -77,16 +81,20 @@ class TaskManager:
         all the tasks spawned inside the pool
         """
 
-        for task in self.tasks:
-            # This forces the interpreter to stop at the
-            # end of the block and wait for all
-            # children to exit
-            await task.join()
-            self.tasks.remove(task)
-        self._proper_init = False
-        if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
-            return True
-
+        try:
+            for task in self.tasks:
+                # This forces the interpreter to stop at the
+                # end of the block and wait for all
+                # children to exit
+                await task.join()
+                self.tasks.remove(task)
+            self._proper_init = False
+            if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
+                return True
+        except giambio.exceptions.TooSlowError:
+            if self.raise_on_timeout:
+                raise
+            
     async def cancel(self):
         """
         Cancels the pool entirely, iterating over all
@@ -104,4 +112,4 @@ class TaskManager:
         pool have exited, False otherwise
         """
 
-        return self._proper_init and all([task.done() for task in self.tasks])
+        return self._proper_init and all([task.done() for task in self.tasks]) and (True if not self.enclosed_pool else self.enclosed_pool.done())

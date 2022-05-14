@@ -8,6 +8,7 @@ async def sender(sock: giambio.socket.AsyncSocket, q: giambio.Queue):
     while True:
         await sock.send_all(b"yo")
         await q.put((0, ""))
+        await giambio.sleep(1)
 
 
 async def receiver(sock: giambio.socket.AsyncSocket, q: giambio.Queue):

@@ -18,13 +18,12 @@ limitations under the License.
 
 import inspect
 import threading
-from typing import Callable, Coroutine, Any, Union
-
 from giambio.core import AsyncScheduler
 from giambio.exceptions import GiambioError
 from giambio.context import TaskManager
 from timeit import default_timer
 from giambio.util.debug import BaseDebugger
+from types import FunctionType
 
 
 thread_local = threading.local()
@@ -42,7 +41,7 @@ def get_event_loop():
         raise GiambioError("giambio is not running") from None
 
 
-def new_event_loop(debugger: BaseDebugger, clock: Callable):
+def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
     """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
@@ -63,7 +62,7 @@ def new_event_loop(debugger: BaseDebugger, clock: Callable):
             thread_local.loop = AsyncScheduler(clock, debugger)
 
 
-def run(func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs):
+def run(func: FunctionType, *args, **kwargs):
     """
     Starts the event loop from a synchronous entry point
     """
@@ -96,16 +95,23 @@ def create_pool():
     return TaskManager()
 
 
-def with_timeout(timeout: Union[int, float]):
+
+def with_timeout(timeout: int or float):
     """
     Creates an async pool with an associated timeout
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    return TaskManager(timeout)
+    loop = get_event_loop()
+    mgr =  TaskManager(timeout)
+    if loop.current_task is not loop.entry_point:
+        mgr.tasks.append(loop.current_task)
+    if loop.current_pool and loop.current_pool is not mgr:
+        loop.current_pool.enclosed_pool = mgr
+    return mgr
 
 
-def skip_after(timeout: Union[int, float]):
+def skip_after(timeout: int or float):
     """
     Creates an async pool with an associated timeout, but
     without raising a TooSlowError exception. The pool
@@ -113,4 +119,11 @@ def skip_after(timeout: Union[int, float]):
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    return TaskManager(timeout, False)
+    loop = get_event_loop()
+    mgr =  TaskManager(timeout, False)
+    if loop.current_task is not loop.entry_point:
+        mgr.tasks.append(loop.current_task)
+    if loop.current_pool and loop.current_pool is not mgr:
+        loop.current_pool.enclosed_pool = mgr
+    return mgr
+    
