@@ -1,3 +1,4 @@
+## Simple task IPC using giambio's NetworkChannel class
 import random
 import string
 import giambio

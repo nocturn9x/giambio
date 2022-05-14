@@ -287,7 +287,7 @@ class DeadlinesQueue:
         :param pool: The pool object to store
         """
 
-        if pool and pool not in self.pools and not pool.done() and not pool.timed_out and pool.timeout:
+        if pool and pool not in self.pools and not pool.timed_out and pool.timeout:
             self.pools.add(pool)
             heappush(self.container, (pool.timeout, self.sequence, pool))
             self.sequence += 1

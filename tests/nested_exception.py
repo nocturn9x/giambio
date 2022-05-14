@@ -36,7 +36,7 @@ async def main():
             print("[main] First 2 children spawned, awaiting completion")
             async with giambio.create_pool() as new_pool:
                 # This pool will be cancelled by the exception
-                # in the other pool
+                # in the outer pool
                 await new_pool.spawn(child2)
                 await new_pool.spawn(child3)
                 print("[main] Third and fourth children spawned")

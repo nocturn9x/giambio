@@ -17,6 +17,7 @@ limitations under the License.
 """
 
 # Import libraries and internal resources
+from lib2to3.pytree import Base
 import types
 from giambio.task import Task
 from collections import deque
@@ -298,7 +299,10 @@ class AsyncScheduler:
             # We need to make sure we don't try to execute
             # exited tasks that are on the running queue
             return
-        if not self.current_pool:
+        if self.current_pool:
+            if self.current_task.pool and self.current_task.pool is not self.current_pool:
+                self.current_task.pool.enclosed_pool = self.current_pool
+        else:
             self.current_pool = self.current_task.pool
         pool = self.current_pool
         while pool:
@@ -462,7 +466,8 @@ class AsyncScheduler:
 
         for task in tasks:
             self.paused.discard(task)
-            self.suspended.remove(task)
+            if task in self.suspended:
+                self.suspended.remove(task)
         self.run_ready.extend(tasks)
         self.reschedule_running()
 
@@ -493,7 +498,7 @@ class AsyncScheduler:
         :return: The closest deadline according to our clock
         :rtype: float
         """
-
+        
         if not self.deadlines:
             # If there are no deadlines just wait until the first task wakeup
             timeout = max(0.0, self.paused.get_closest_deadline() - self.clock())
@@ -616,8 +621,9 @@ class AsyncScheduler:
         If ensure_done equals False, the loop will cancel ALL
         running and scheduled tasks and then tear itself down.
         If ensure_done equals True, which is the default behavior,
-        this method will raise a GiambioError if the loop hasn't
-        finished running.
+        this method will raise a GiambioError exception if the loop 
+        hasn't finished running. The state of the event loop is reset 
+        so it can be reused with another run() call
         """
 
         if ensure_done:
@@ -644,18 +650,11 @@ class AsyncScheduler:
 
         if task.pool and task.pool.enclosed_pool and not task.pool.enclosed_pool.done():
             return
-        for t in task.joiners:
-            if t not in self.run_ready:
-                # Since a task can be the parent
-                # of multiple children, we need to
-                # make sure we reschedule it only
-                # once, otherwise a RuntimeError will
-                # occur
-                self.run_ready.append(t)
+        self.run_ready.extend(task.joiners)
 
     def join(self, task: Task):
         """
-        Joins a task to its callers (implicitly, the parent
+        Joins a task to its callers (implicitly the parent
         task, but also every other task who called await
         task.join() on the task object)
         """
@@ -668,8 +667,9 @@ class AsyncScheduler:
                 self.io_release_task(task)
             if task in self.suspended:
                 self.suspended.remove(task)
-            # If the pool has finished executing or we're at the first parent
-            # task that kicked the loop, we can safely reschedule the parent(s)
+            # If the pool (including any enclosing pools) has finished executing 
+            # or we're at the first task that kicked the loop, we can safely 
+            # reschedule the parent(s)
             if task.pool is None:
                 return
             if task.pool.done():
@@ -680,7 +680,7 @@ class AsyncScheduler:
             task.status = "crashed"
             if task.exc.__traceback__:
                 # TODO: We might want to do a bit more complex traceback hacking to remove any extra
-                # frames from the exception call stack, but for now removing at least the first one
+                # frames from the exception call stack, but for now removing at least the first few
                 # seems a sensible approach (it's us catching it so we don't care about that)
                 for _ in range(5):
                     if task.exc.__traceback__.tb_next:
