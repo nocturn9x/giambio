@@ -55,7 +55,7 @@ class TaskManager:
         self._proper_init = False
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
         self.raise_on_timeout: bool = raise_on_timeout
-        self.entry_point: Optional[Task] = None
+        self.entry_point: Optional[giambio.Task] = None
 
     async def spawn(self, func: types.FunctionType, *args, **kwargs) -> "giambio.task.Task":
         """

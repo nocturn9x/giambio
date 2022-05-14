@@ -1,3 +1,5 @@
+## Two-way proxy example stolen from njsmith's talk about trio
+
 from debugger import Debugger
 import giambio
 import socket

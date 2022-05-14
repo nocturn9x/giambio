@@ -95,19 +95,16 @@ def create_pool():
     return TaskManager()
 
 
-
 def with_timeout(timeout: int or float):
     """
     Creates an async pool with an associated timeout
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
+    mgr = TaskManager(timeout)
     loop = get_event_loop()
-    mgr =  TaskManager(timeout)
-    if loop.current_task is not loop.entry_point:
-        mgr.tasks.append(loop.current_task)
-    if loop.current_pool and loop.current_pool is not mgr:
-        loop.current_pool.enclosed_pool = mgr
+    if loop.current_task is loop.entry_point:
+        loop.current_pool = mgr
     return mgr
 
 
@@ -119,11 +116,8 @@ def skip_after(timeout: int or float):
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
+    mgr = TaskManager(timeout, False)
     loop = get_event_loop()
-    mgr =  TaskManager(timeout, False)
-    if loop.current_task is not loop.entry_point:
-        mgr.tasks.append(loop.current_task)
-    if loop.current_pool and loop.current_pool is not mgr:
-        loop.current_pool.enclosed_pool = mgr
+    if loop.current_task is loop.entry_point:
+        loop.current_pool = mgr
     return mgr
-    

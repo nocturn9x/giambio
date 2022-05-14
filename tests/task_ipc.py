@@ -1,4 +1,4 @@
-## SImple task IPC using giambio's MemoryChannel class
+## Simple task IPC using giambio's MemoryChannel class
 import random
 import string
 import giambio
