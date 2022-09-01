@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import warnings
 
 import giambio
 from giambio.exceptions import ResourceClosed
@@ -94,6 +95,7 @@ class AsyncSocket:
 
         if self._fd == -1:
             raise ResourceClosed("I/O operation on closed socket")
+        sent_no = 0
         while data:
             try:
                 sent_no = self.sock.send(data, flags)
@@ -160,33 +162,33 @@ class AsyncSocket:
     # arsed to write a bunch of uninteresting simple socket
     # methods from scratch, deal with it.
 
-    def fileno(self):
+    async def fileno(self):
         """
         Wrapper socket method
         """
 
         return self._fd
 
-    def settimeout(self, seconds):
+    async def settimeout(self, seconds):
         """
         Wrapper socket method
         """
 
         raise RuntimeError("Use with_timeout() to set a timeout")
 
-    def gettimeout(self):
+    async def gettimeout(self):
         """
         Wrapper socket method
         """
 
         return None
 
-    def dup(self):
+    async def dup(self):
         """
         Wrapper socket method
         """
 
-        return type(self)(self._socket.dup())
+        return type(self)(self.sock.dup())
 
     async def do_handshake(self):
         """
@@ -308,3 +310,11 @@ class AsyncSocket:
 
     def __repr__(self):
         return f"AsyncSocket({self.sock})"
+
+    def __del__(self):
+        """
+        Socket destructor
+        """
+
+        if not self._fd != -1:
+            warnings.warn(f"socket '{self}' was destroyed, but was not closed, leading to a potential resource leak")

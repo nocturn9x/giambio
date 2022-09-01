@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +23,7 @@ from giambio.exceptions import GiambioError
 from giambio.context import TaskManager
 from timeit import default_timer
 from giambio.util.debug import BaseDebugger
-from types import FunctionType
+from typing import Coroutine, Callable, Any
 
 
 thread_local = threading.local()
@@ -41,7 +41,7 @@ def get_event_loop():
         raise GiambioError("giambio is not running") from None
 
 
-def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
+def new_event_loop(debugger: BaseDebugger, clock: Callable):
     """
     Associates a new event loop to the current thread
     and deactivates the old one. This should not be
@@ -62,7 +62,7 @@ def new_event_loop(debugger: BaseDebugger, clock: FunctionType):
             thread_local.loop = AsyncScheduler(clock, debugger)
 
 
-def run(func: FunctionType, *args, **kwargs):
+def run(func: Callable[[Any, Any], Coroutine[Any, Any, Any]], *args, **kwargs):
     """
     Starts the event loop from a synchronous entry point
     """
@@ -92,7 +92,7 @@ def create_pool():
     Creates an async pool
     """
 
-    return TaskManager()
+    return TaskManager(get_event_loop().current_task)
 
 
 def with_timeout(timeout: int or float):
@@ -101,10 +101,11 @@ def with_timeout(timeout: int or float):
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    mgr = TaskManager(timeout)
+    mgr = TaskManager(get_event_loop().current_task, timeout, True)
     loop = get_event_loop()
     if loop.current_task is loop.entry_point:
         loop.current_pool = mgr
+        loop.current_task.pool = mgr
     return mgr
 
 
@@ -116,8 +117,9 @@ def skip_after(timeout: int or float):
     """
 
     assert timeout > 0, "The timeout must be greater than 0"
-    mgr = TaskManager(timeout, False)
+    mgr = TaskManager(get_event_loop().current_task, timeout)
     loop = get_event_loop()
     if loop.current_task is loop.entry_point:
         loop.current_pool = mgr
+        loop.current_task.pool = mgr
     return mgr

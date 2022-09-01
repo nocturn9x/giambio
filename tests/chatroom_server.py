@@ -46,7 +46,7 @@ async def handler(sock: AsyncSocket, client_address: tuple):
 
     address = f"{client_address[0]}:{client_address[1]}"
     async with sock:  # Closes the socket automatically
-        await sock.send_all(b"Welcome to the chartoom pal, start typing and press enter!\n")
+        await sock.send_all(b"Welcome to the chatroom pal, start typing and press enter!\n")
         while True:
             data = await sock.receive(1024)
             if not data:

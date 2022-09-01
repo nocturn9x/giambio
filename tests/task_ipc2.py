@@ -29,5 +29,4 @@ async def main(channel: giambio.NetworkChannel, delay: int):
             print(f"[main] Cleared {await channel.read(1)!r}")
 
 
-channel = giambio.NetworkChannel()
-giambio.run(main, channel, 4, debugger=())
+giambio.run(main, giambio.NetworkChannel(), 4, debugger=())

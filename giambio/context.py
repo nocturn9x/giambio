@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,10 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from lib2to3.pgen2.token import OP
-import types
 import giambio
-from typing import List, Optional
+from giambio.task import Task
+from typing import List, Optional, Callable, Coroutine, Any
 
 
 class TaskManager:
@@ -33,13 +32,13 @@ class TaskManager:
     :type raise_on_timeout: bool, optional
     """
 
-    def __init__(self, timeout: float = None, raise_on_timeout: bool = True) -> None:
+    def __init__(self, current_task: Task, timeout: float = None, raise_on_timeout: bool = False) -> None:
         """
         Object constructor
         """
 
         # All the tasks that belong to this pool
-        self.tasks: List[giambio.task.Task] = []
+        self.tasks: List[Task] = []
         # Whether we have been cancelled or not
         self.cancelled: bool = False
         # The clock time of when we started running, used for
@@ -52,12 +51,21 @@ class TaskManager:
             self.timeout = None
         # Whether our timeout expired or not
         self.timed_out: bool = False
+        # Internal check so users don't try
+        # to use the pool manually
         self._proper_init = False
+        # We keep track of any inner pools to propagate
+        # exceptions properly
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
+        # Do we raise an error after timeout?
         self.raise_on_timeout: bool = raise_on_timeout
-        self.entry_point: Optional[giambio.Task] = None
+        # The task that created the pool. We keep track of
+        # it because we only cancel ourselves if this task
+        # errors out (so if the error is caught before reaching
+        # it we just do nothing)
+        self.owner: Task = current_task
 
-    async def spawn(self, func: types.FunctionType, *args, **kwargs) -> "giambio.task.Task":
+    async def spawn(self, func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> "giambio.task.Task":
         """
         Spawns a child task
         """
@@ -72,7 +80,6 @@ class TaskManager:
         """
 
         self._proper_init = True
-        self.entry_point = await giambio.traps.current_task()
         return self
 
     async def __aexit__(self, exc_type: Exception, exc: Exception, tb):
@@ -88,13 +95,14 @@ class TaskManager:
                 # children to exit
                 await task.join()
                 self.tasks.remove(task)
-            self._proper_init = False
-            if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
-                return True
         except giambio.exceptions.TooSlowError:
             if self.raise_on_timeout:
                 raise
-            
+        finally:
+            self._proper_init = False
+        if isinstance(exc, giambio.exceptions.TooSlowError) and not self.raise_on_timeout:
+            return True
+
     async def cancel(self):
         """
         Cancels the pool entirely, iterating over all
@@ -112,4 +120,4 @@ class TaskManager:
         pool have exited, False otherwise
         """
 
-        return self._proper_init and all([task.done() for task in self.tasks]) and (True if not self.enclosed_pool else self.enclosed_pool.done())
+        return self._proper_init and all([task.done() for task in self.tasks])

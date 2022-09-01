@@ -21,11 +21,11 @@ async def receiver(c: giambio.MemoryChannel):
 
 
 async def main(channel: giambio.MemoryChannel, n: int):
+    print("Starting sender and receiver")
     async with giambio.create_pool() as pool:
         await pool.spawn(sender, channel, n)
         await pool.spawn(receiver, channel)
-    
+    print("All done!")
 
 
-channel = giambio.MemoryChannel(2)
-giambio.run(main, channel, 5, debugger=())
+giambio.run(main, giambio.MemoryChannel(2), 5, debugger=())  # 2 is the max size of the channel

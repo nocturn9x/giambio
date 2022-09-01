@@ -3,7 +3,10 @@ Implementation for all giambio traps, which are hooks
 into the event loop and allow it to switch tasks.
 These coroutines are the one and only way to interact
 with the event loop from the user's perspective, and
-the entire library is based on them
+the entire library is based on them. These low-level
+primitives should not be used on their own unless you
+know what you're doing: the library already abstracts
+them away with more complex object wrappers and functions
 
 Copyright (C) 2020 nocturn9x
 
@@ -11,7 +14,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,19 +39,20 @@ def create_trap(method, *args):
     interact with the event loop
     """
 
-    data = yield method, *args
-    return data
+    return (yield method, *args)
 
 
 async def suspend() -> Any:
     """
-    Suspends the current task
+    Suspends the current task. The
+    task can still be woken up by
+    any pending timers, I/O or cancellations
     """
 
     return await create_trap("suspend")
 
 
-async def create_task(coro: Callable[..., Coroutine[Any, Any, Any]], pool, *args):
+async def create_task(coro: Callable[[Any, Any], Coroutine[Any, Any, Any]], pool, *args, **kwargs):
     """
     Spawns a new task in the current event loop from a bare coroutine
     function. All extra positional arguments are passed to the function
@@ -59,11 +63,11 @@ async def create_task(coro: Callable[..., Coroutine[Any, Any, Any]], pool, *args
 
     if inspect.iscoroutine(coro):
         raise GiambioError(
-            "Looks like you tried to call giambio.run(your_func(arg1, arg2, ...)), that is wrong!"
-            "\nWhat you wanna do, instead, is this: giambio.run(your_func, arg1, arg2, ...)"
+            "Looks like you tried to call pool.create_task(your_func(arg1, arg2, ...)), that is wrong!"
+            "\nWhat you wanna do, instead, is this: pool.create_task(your_func, arg1, arg2, ...)"
         )
     elif inspect.iscoroutinefunction(coro):
-        return await create_trap("create_task", coro, pool, *args)
+        return await create_trap("create_task", coro(*args, **kwargs), pool)
     else:
         raise TypeError("coro must be a coroutine function")
 

@@ -30,11 +30,12 @@ async def consumer(q: giambio.Queue):
 
 
 async def main(q: giambio.Queue, n: int):
+    print("Starting consumer and producer")
     async with giambio.create_pool() as pool:
         await pool.spawn(producer, q, n)
         await pool.spawn(consumer, q)
     print("Bye!")
 
 
-queue = giambio.Queue(1)  # Queue has size limit of 1
+queue = giambio.Queue(2)  # Queue has size limit of 2
 giambio.run(main, queue, 5, debugger=())

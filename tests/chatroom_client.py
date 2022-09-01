@@ -13,7 +13,6 @@ async def sender(sock: giambio.socket.AsyncSocket, q: giambio.Queue):
 
 async def receiver(sock: giambio.socket.AsyncSocket, q: giambio.Queue):
     data = b""
-    buffer = b""
     while True:
         while not data.endswith(b"\n"):
             data += await sock.receive(1024)

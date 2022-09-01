@@ -42,7 +42,7 @@ async def main():
             print("[main] First 2 children spawned, awaiting completion")
             async with giambio.create_pool() as a_pool:
                 await a_pool.spawn(child1)
-                print("[main] Third children spawned, prepare for trouble in 2 seconds")
+                print("[main] Third children spawned, prepare for delayed trouble in 2 seconds")
                 async with giambio.create_pool() as new_pool:
                     # This pool will be cancelled by the exception
                     # in the outer pool
@@ -50,6 +50,7 @@ async def main():
                     await new_pool.spawn(child3)
                     print("[main] Fourth and fifth children spawned")
     except Exception as error:
+        # raise
         # Because exceptions just *work*!
         print(f"[main] Exception from child caught! {repr(error)}")
     print(f"[main] Children execution complete in {giambio.clock() - start:.2f} seconds")

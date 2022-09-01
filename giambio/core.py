@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,14 +17,12 @@ limitations under the License.
 """
 
 # Import libraries and internal resources
-from lib2to3.pytree import Base
-import types
 from giambio.task import Task
 from collections import deque
 from functools import partial
 from timeit import default_timer
 from giambio.context import TaskManager
-from typing import Callable, List, Optional, Any, Dict
+from typing import Callable, List, Optional, Any, Dict, Coroutine
 from giambio.util.debug import BaseDebugger
 from giambio.internal import TimeQueue, DeadlinesQueue
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
@@ -57,7 +55,7 @@ class AsyncScheduler:
 
     :param clock: A callable returning monotonically increasing values at each call,
         usually using seconds as units, but this is not enforced, defaults to timeit.default_timer
-    :type clock: :class: types.FunctionType
+    :type clock: :class: Callable
     :param debugger: A subclass of giambio.util.BaseDebugger or None if no debugging output
         is desired, defaults to None
     :type debugger: :class: giambio.util.BaseDebugger
@@ -74,7 +72,7 @@ class AsyncScheduler:
 
     def __init__(
         self,
-        clock: types.FunctionType = default_timer,
+        clock: Callable = default_timer,
         debugger: Optional[BaseDebugger] = None,
         selector: Optional[Any] = None,
         io_skip_limit: Optional[int] = None,
@@ -96,7 +94,7 @@ class AsyncScheduler:
             or type(
                 "DumbDebugger",
                 (object,),
-                {"__getattr__": lambda *_: lambda *_: None},
+                {"__getattr__": lambda *args: lambda *arg: None},
             )()
         )
         # All tasks the loop has
@@ -108,7 +106,7 @@ class AsyncScheduler:
         # This will always point to the currently running coroutine (Task object)
         self.current_task: Optional[Task] = None
         # Monotonic clock to keep track of elapsed time reliably
-        self.clock: types.FunctionType = clock
+        self.clock: Callable = clock
         # Tasks that are asleep
         self.paused: TimeQueue = TimeQueue(self.clock)
         # Have we ever ran?
@@ -131,7 +129,6 @@ class AsyncScheduler:
         self.entry_point: Optional[Task] = None
         # Suspended tasks
         self.suspended: deque = deque()
-    
 
     def __repr__(self):
         """
@@ -153,8 +150,6 @@ class AsyncScheduler:
             "_data",
             "io_skip_limit",
             "io_max_timeout",
-            "suspended",
-            "entry_point"
         }
         data = ", ".join(
             name + "=" + str(value) for name, value in zip(fields, (getattr(self, field) for field in fields))
@@ -211,10 +206,7 @@ class AsyncScheduler:
                 # after it is set, but it makes the implementation easier
                 if not self.current_pool and self.current_task.pool:
                     self.current_pool = self.current_task.pool
-                pool = self.current_pool
-                while pool:
-                    self.deadlines.put(pool)
-                    pool = self.current_pool.enclosed_pool
+                self.deadlines.put(self.current_pool)
                 # If there are no actively running tasks, we start by
                 # checking for I/O. This method will wait for I/O until
                 # the closest deadline to avoid starving sleeping tasks
@@ -241,7 +233,6 @@ class AsyncScheduler:
                 # represents the return value of the coroutine, if any. Of course this
                 # exception is not an error and we should happily keep going after it,
                 # most of this code below is just useful for internal/debugging purposes
-                self.current_task.status = "end"
                 self.current_task.result = ret.value
                 self.current_task.finished = True
                 self.join(self.current_task)
@@ -253,22 +244,20 @@ class AsyncScheduler:
                 self.current_task.exc = err
                 self.join(self.current_task)
 
-
-    def create_task(self, corofunc: types.FunctionType, pool, *args, **kwargs) -> Task:
+    def create_task(self, coro: Coroutine[Any, Any, Any], pool) -> Task:
         """
         Creates a task from a coroutine function and schedules it
         to run. The associated pool that spawned said task is also
         needed, while any extra keyword or positional arguments are
         passed to the function itself
 
-        :param corofunc: The coroutine function (not a coroutine!) to
-            spawn
-        :type corofunc: function
+        :param coro: The coroutine to spawn
+        :type coro: Coroutine[Any, Any, Any]
         :param pool: The giambio.context.TaskManager object that
             spawned the task
         """
 
-        task = Task(corofunc.__name__ or str(corofunc), corofunc(*args, **kwargs), pool)
+        task = Task(coro.__name__ or str(coro), coro, pool)
         task.next_deadline = pool.timeout or 0.0
         task.joiners = {self.current_task}
         self._data[self.current_task] = task
@@ -299,15 +288,9 @@ class AsyncScheduler:
             # We need to make sure we don't try to execute
             # exited tasks that are on the running queue
             return
-        if self.current_pool:
-            if self.current_task.pool and self.current_task.pool is not self.current_pool:
-                self.current_task.pool.enclosed_pool = self.current_pool
-        else:
+        if not self.current_pool and self.current_task.pool:
             self.current_pool = self.current_task.pool
-        pool = self.current_pool
-        while pool:
-            self.deadlines.put(pool)
-            pool = self.current_pool.enclosed_pool
+        self.deadlines.put(self.current_pool)
         self.debugger.before_task_step(self.current_task)
         # Some debugging and internal chatter here
         self.current_task.status = "run"
@@ -351,7 +334,7 @@ class AsyncScheduler:
 
         if self.selector.get_map():
             for k in filter(
-                lambda o: o.data == task,
+                lambda o: o.data == self.current_task,
                 dict(self.selector.get_map()).values(),
             ):
                 self.io_release(k.fileobj)
@@ -361,16 +344,11 @@ class AsyncScheduler:
         """
         Suspends execution of the current task. This is basically
         a do-nothing method, since it will not reschedule the task
-        before returning. The task will stay suspended as long as
-        something else outside the loop calls a trap to reschedule it.
-        Any pending I/O for the task is temporarily unscheduled to 
-        avoid some previous network operation to reschedule the task
-        before it's due
+        before returning. The task will stay suspended until a timer,
+        I/O operation or cancellation wakes it up, or until another
+        running task reschedules it.
         """
-        
-        if self.current_task.last_io or self.current_task.status == "io":
-            self.io_release_task(self.current_task)
-        self.current_task.status = "sleep"
+
         self.suspended.append(self.current_task)
 
     def reschedule_running(self):
@@ -430,32 +408,27 @@ class AsyncScheduler:
         try:
             to_call()
         except StopIteration as ret:
-            task.status = "end"
             task.result = ret.value
             task.finished = True
             self.join(task)
-            self.tasks.remove(task)
         except BaseException as err:
             task.exc = err
             self.join(task)
-            if task in self.tasks:
-                self.tasks.remove(task)
 
     def prune_deadlines(self):
         """
         Removes expired deadlines after their timeout
-        has expired
+        has expired and cancels their associated pool
         """
 
         while self.deadlines and self.deadlines.get_closest_deadline() <= self.clock():
             pool = self.deadlines.get()
             pool.timed_out = True
-            self.cancel_pool(pool)
             for task in pool.tasks:
-                self.join(task)
-            if pool.entry_point is self.entry_point:
-                self.handle_task_exit(self.entry_point, partial(self.entry_point.throw, TooSlowError(self.entry_point)))
-                self.run_ready.append(self.entry_point)
+                if task is not pool.owner:
+                    self.handle_task_exit(task, partial(task.throw, TooSlowError(self.current_task)))
+            if pool.raise_on_timeout:
+                self.handle_task_exit(pool.owner, partial(pool.owner.throw, TooSlowError(self.current_task)))
 
     def schedule_tasks(self, tasks: List[Task]):
         """
@@ -466,8 +439,7 @@ class AsyncScheduler:
 
         for task in tasks:
             self.paused.discard(task)
-            if task in self.suspended:
-                self.suspended.remove(task)
+            self.suspended.remove(task)
         self.run_ready.extend(tasks)
         self.reschedule_running()
 
@@ -490,7 +462,6 @@ class AsyncScheduler:
             self.run_ready.append(task)
             self.debugger.after_sleep(task, slept)
 
-
     def get_closest_deadline(self) -> float:
         """
         Gets the closest expiration deadline (asleep tasks, timeouts)
@@ -498,7 +469,7 @@ class AsyncScheduler:
         :return: The closest deadline according to our clock
         :rtype: float
         """
-        
+
         if not self.deadlines:
             # If there are no deadlines just wait until the first task wakeup
             timeout = max(0.0, self.paused.get_closest_deadline() - self.clock())
@@ -551,7 +522,7 @@ class AsyncScheduler:
             self.run_ready.append(key.data)  # Resource ready? Schedule its task
         self.debugger.after_io(self.clock() - before_time)
 
-    def start(self, func: types.FunctionType, *args, loop: bool = True):
+    def start(self, func: Callable[..., Coroutine[Any, Any, Any]], *args, loop: bool = True):
         """
         Starts the event loop from a sync context. If the loop parameter
         is false, the event loop will not start listening for events
@@ -564,12 +535,9 @@ class AsyncScheduler:
         self.run_ready.append(entry)
         self.debugger.on_start()
         if loop:
-            try:
-                self.run()
-            finally:
-                self.has_ran = True
-                self.close()
-                self.debugger.on_exit()
+            self.run()
+            self.has_ran = True
+            self.debugger.on_exit()
 
     def cancel_pool(self, pool: TaskManager) -> bool:
         """
@@ -621,9 +589,8 @@ class AsyncScheduler:
         If ensure_done equals False, the loop will cancel ALL
         running and scheduled tasks and then tear itself down.
         If ensure_done equals True, which is the default behavior,
-        this method will raise a GiambioError exception if the loop 
-        hasn't finished running. The state of the event loop is reset 
-        so it can be reused with another run() call
+        this method will raise a GiambioError if the loop hasn't
+        finished running.
         """
 
         if ensure_done:
@@ -631,16 +598,6 @@ class AsyncScheduler:
         elif not self.done():
             raise GiambioError("event loop not terminated, call this method with ensure_done=False to forcefully exit")
         self.shutdown()
-        # We reset the event loop's state
-        self.tasks = []
-        self.entry_point = None
-        self.current_pool = None
-        self.current_task = None
-        self.paused = TimeQueue(self.clock)
-        self.deadlines = DeadlinesQueue()
-        self.run_ready = deque()
-        self.suspended = deque()
-
 
     def reschedule_joiners(self, task: Task):
         """
@@ -648,35 +605,49 @@ class AsyncScheduler:
         given task, if any
         """
 
-        if task.pool and task.pool.enclosed_pool and not task.pool.enclosed_pool.done():
-            return
-        self.run_ready.extend(task.joiners)
+        for t in task.joiners:
+            self.run_ready.append(t)
+
+    # noinspection PyMethodMayBeStatic
+    def is_pool_done(self, pool: Optional[TaskManager]):
+        """
+        Returns True if a given pool has finished
+        executing
+        """
+
+        while pool:
+            if not pool.done():
+                return False
+            pool = pool.enclosed_pool
+        return True
 
     def join(self, task: Task):
         """
-        Joins a task to its callers (implicitly the parent
+        Joins a task to its callers (implicitly, the parent
         task, but also every other task who called await
         task.join() on the task object)
         """
 
         task.joined = True
+        if any([task.finished, task.cancelled, task.exc]) and task in self.tasks:
+            self.io_release_task(task)
+            self.tasks.remove(task)
+            self.paused.discard(task)
         if task.finished or task.cancelled:
+            task.status = "end"
             if not task.cancelled:
+                task.status = "cancelled"
+                # This way join() returns the
+                # task's return value
+                for joiner in task.joiners:
+                    self._data[joiner] = task.result
                 self.debugger.on_task_exit(task)
-            if task.last_io:
-                self.io_release_task(task)
-            if task in self.suspended:
-                self.suspended.remove(task)
-            # If the pool (including any enclosing pools) has finished executing 
-            # or we're at the first task that kicked the loop, we can safely 
-            # reschedule the parent(s)
-            if task.pool is None:
-                return
-            if task.pool.done():
+            # If the pool has finished executing or we're at the first parent
+            # task that kicked the loop, we can safely reschedule the parent(s)
+            if self.is_pool_done(task.pool):
                 self.reschedule_joiners(task)
+            self.reschedule_running()
         elif task.exc:
-            if task in self.suspended:
-                self.suspended.remove(task)
             task.status = "crashed"
             if task.exc.__traceback__:
                 # TODO: We might want to do a bit more complex traceback hacking to remove any extra
@@ -686,26 +657,35 @@ class AsyncScheduler:
                     if task.exc.__traceback__.tb_next:
                         task.exc.__traceback__ = task.exc.__traceback__.tb_next
             self.debugger.on_exception_raised(task, task.exc)
-            if task.pool is None or task is self.entry_point:
-                # Parent task has no pool, so we propagate
-                raise task.exc
-            if self.cancel_pool(task.pool):
-                # This will reschedule the parent(s)
-                # only if all the tasks inside the task's
-                # pool have finished executing, either
-                # by cancellation, an exception
-                # or just returned
-                for t in task.joiners.copy():
-                    # Propagate the exception
-                    try:
-                        t.throw(task.exc)
-                    except (StopIteration, CancelledError, RuntimeError):
-                        # TODO: Need anything else?
-                        task.joiners.remove(t)
-                    finally:
-                        if t in self.tasks:
-                            self.tasks.remove(t)
-                self.reschedule_joiners(task)
+            if task is self.entry_point and not task.pool:
+                try:
+                    task.throw(task.exc)
+                except StopIteration:
+                    ...    # TODO: ?
+                except BaseException:
+                    # TODO: No idea what to do here
+                    raise
+            elif any(map(lambda tk: tk is task.pool.owner, task.joiners)) or task is task.pool.owner:
+                # We check if the pool's
+                # owner catches our error
+                # or not. If they don't, we
+                # cancel the entire pool, but
+                # if they do, we do nothing
+                if task.pool.owner is not task:
+                    self.handle_task_exit(task.pool.owner, partial(task.pool.owner.coroutine.throw, task.exc))
+                if any([task.pool.owner.exc, task.pool.owner.cancelled, task.pool.owner.finished]):
+                    for t in task.joiners.copy():
+                        # Propagate the exception
+                        self.handle_task_exit(t, partial(t.throw, task.exc))
+                        if any([t.exc, t.finished, t.cancelled]):
+                            task.joiners.remove(t)
+                    for t in task.pool.tasks:
+                        if not t.joined:
+                            self.handle_task_exit(t, partial(t.throw, task.exc))
+                        if any([t.exc, t.finished, t.cancelled]):
+                            task.joiners.discard(t)
+                    self.reschedule_joiners(task)
+                self.reschedule_running()
 
     def sleep(self, seconds: int or float):
         """
@@ -747,8 +727,6 @@ class AsyncScheduler:
                 self.io_release_task(task)
             elif task.status == "sleep":
                 self.paused.discard(task)
-            if task in self.suspended:
-                self.suspended.remove(task)
             try:
                 self.do_cancel(task)
             except CancelledError as cancel:
@@ -764,23 +742,24 @@ class AsyncScheduler:
                 task = cancel.task
                 task.cancel_pending = False
                 task.cancelled = True
-                task.status = "cancelled"
+                self.io_release_task(self.current_task)
                 self.debugger.after_cancel(task)
                 self.tasks.remove(task)
             else:
                 # If the task ignores our exception, we'll
                 # raise it later again
                 task.cancel_pending = True
+        self.join(task)
 
     def register_sock(self, sock, evt_type: str):
         """
         Registers the given socket inside the
-        selector to perform I/O multiplexing
+        selector to perform I/0 multiplexing
 
         :param sock: The socket on which a read or write operation
-            has to be performed
+        has to be performed
         :param evt_type: The type of event to perform on the given
-            socket, either "read" or "write"
+        socket, either "read" or "write"
         :type evt_type: str
         """
 
@@ -814,8 +793,5 @@ class AsyncScheduler:
             try:
                 self.selector.register(sock, evt, self.current_task)
             except KeyError:
-                # The socket is already registered doing something else, we
-                # modify the socket instead (or maybe not?)
-                self.selector.modify(sock, evt, self.current_task)
-                # TODO: Does this break stuff?
-                # raise ResourceBusy("The given socket is being read/written by another task") from None
+                # The socket is already registered doing something else
+                raise ResourceBusy("The given socket is being read/written by another task") from None

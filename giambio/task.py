@@ -98,7 +98,7 @@ class Task:
         :type err: Exception
         """
 
-        # self.exc = err
+        self.exc = err
         return self.coroutine.throw(err)
 
     async def join(self):
@@ -108,8 +108,6 @@ class Task:
         are propagated as well
         """
 
-        if task := await giambio.traps.current_task():
-            self.joiners.add(task)
         return await giambio.traps.join(self)
 
     async def cancel(self):
