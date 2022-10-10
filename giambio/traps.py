@@ -67,7 +67,7 @@ async def create_task(coro: Callable[[Any, Any], Coroutine[Any, Any, Any]], pool
             "\nWhat you wanna do, instead, is this: pool.create_task(your_func, arg1, arg2, ...)"
         )
     elif inspect.iscoroutinefunction(coro):
-        return await create_trap("create_task", coro(*args, **kwargs), pool)
+        return await create_trap("create_task", coro, pool, *args, **kwargs)
     else:
         raise TypeError("coro must be a coroutine function")
 

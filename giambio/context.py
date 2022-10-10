@@ -53,7 +53,7 @@ class TaskManager:
         self._proper_init = False
         self.enclosed_pool: Optional["giambio.context.TaskManager"] = None
         self.raise_on_timeout: bool = raise_on_timeout
-        self.entry_point: Optional[giambio.Task] = None
+        self.entry_point: Optional[Task] = None
 
     async def spawn(self, func: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> "giambio.task.Task":
         """
@@ -66,7 +66,7 @@ class TaskManager:
 
     async def __aenter__(self):
         """
-        Implements the asynchronous context manager interface,
+        Implements the asynchronous context manager interface
         """
 
         self._proper_init = True

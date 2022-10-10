@@ -71,4 +71,5 @@ if __name__ == "__main__":
         if isinstance(error, KeyboardInterrupt):
             logging.info("Ctrl+C detected, exiting")
         else:
+            raise
             logging.error(f"Exiting due to a {type(error).__name__}: {error}")
