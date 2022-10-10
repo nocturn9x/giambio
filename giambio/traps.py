@@ -178,6 +178,19 @@ async def want_write(stream):
     await create_trap("register_sock", stream, "write")
 
 
+async def notify_closing(stream):
+    """
+    Notifies the event loop that a given
+    stream needs to be closed. This makes
+    all callers waiting on want_read or
+    want_write crash with a ResourceClosed
+    exception, but it doesn't actually close
+    the socket object itself
+    """
+
+    await create_trap("notify_closing", stream)
+
+
 async def schedule_tasks(tasks: Iterable[Task]):
     """
     Schedules a list of tasks for execution. Usuaully

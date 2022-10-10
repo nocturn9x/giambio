@@ -63,7 +63,7 @@ if __name__ == "__main__":
     logging.basicConfig(
         level=20,
         format="[%(levelname)s] %(asctime)s %(message)s",
-        datefmt="%d/%m/%Y %p",
+        datefmt="%d/%m/%Y %H:%M:%S %p",
     )
     try:
         giambio.run(serve, ("localhost", port), debugger=())

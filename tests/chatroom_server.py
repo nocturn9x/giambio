@@ -1,4 +1,3 @@
-from typing import List
 import giambio
 from giambio.socket import AsyncSocket
 import logging
@@ -6,7 +5,8 @@ import sys
 
 # An asynchronous chatroom
 
-clients: List[giambio.socket.AsyncSocket] = []
+clients: dict[AsyncSocket, list[str, str]] = {}
+names: set[str] = set()
 
 
 async def serve(bind_address: tuple):
@@ -26,39 +26,52 @@ async def serve(bind_address: tuple):
             while True:
                 try:
                     conn, address_tuple = await sock.accept()
-                    clients.append(conn)
+                    clients[conn] = ["", f"{address_tuple[0]}:{address_tuple[1]}"]
                     logging.info(f"{address_tuple[0]}:{address_tuple[1]} connected")
-                    await pool.spawn(handler, conn, address_tuple)
+                    await pool.spawn(handler, conn)
                 except Exception as err:
                     # Because exceptions just *work*
                     logging.info(f"{address_tuple[0]}:{address_tuple[1]} has raised {type(err).__name__}: {err}")
 
 
-async def handler(sock: AsyncSocket, client_address: tuple):
+async def handler(sock: AsyncSocket):
     """
     Handles a single client connection
 
     :param sock: The AsyncSocket object connected to the client
-    :param client_address: The client's address represented as a tuple
-    (address, port) where address is a string and port is an integer
-    :type client_address: tuple
     """
 
-    address = f"{client_address[0]}:{client_address[1]}"
+    address = clients[sock][1]
+    name = ""
     async with sock:  # Closes the socket automatically
-        await sock.send_all(b"Welcome to the chatroom pal, start typing and press enter!\n")
+        await sock.send_all(b"Welcome to the chatroom pal, may you tell me your name?\n> ")
         while True:
+            while not name.endswith("\n"):
+                name = (await sock.receive(64)).decode()
+            name = name[:-1]
+            if name not in names:
+                names.add(name)
+                clients[sock][0] = name
+                break
+            else:
+                await sock.send_all(b"Sorry, but that name is already taken. Try again!\n> ")
+        await sock.send_all(f"Okay {name}, welcome to the chatroom!\n".encode())
+        logging.info(f"{name} has joined the chatroom ({address}), informing clients")
+        for i, client_sock in enumerate(clients):
+            if client_sock != sock and clients[client_sock][0]:
+                await client_sock.send_all(f"{name} joins the chatroom!\n> ".encode())
+        while True:
+            await sock.send_all(b"> ")
             data = await sock.receive(1024)
             if not data:
                 break
-            elif data == b"exit\n":
-                await sock.send_all(b"I'm dead dude\n")
-                raise TypeError("Oh, no, I'm gonna die!")
             logging.info(f"Got: {data!r} from {address}")
             for i, client_sock in enumerate(clients):
-                logging.info(f"Sending {data!r} to {':'.join(map(str, await client_sock.getpeername()))}")
-                if client_sock != sock:
-                    await client_sock.send_all(data)
+                if client_sock != sock and clients[client_sock][0]:
+                    logging.info(f"Sending {data!r} to {':'.join(map(str, await client_sock.getpeername()))}")
+                    if not data.endswith(b"\n"):
+                        data += b"\n"
+                    await client_sock.send_all(f"[{name}] ({address}): {data.decode()}> ".encode())
             logging.info(f"Sent {data!r} to {i} clients")
     logging.info(f"Connection from {address} closed")
     clients.remove(sock)

@@ -15,14 +15,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import socket
 import warnings
-
+import os
 import giambio
 from giambio.exceptions import ResourceClosed
-from giambio.traps import want_write, want_read, io_release
+from giambio.traps import want_write, want_read, io_release, notify_closing
+
 
 try:
-    from ssl import SSLWantReadError, SSLWantWriteError
+    from ssl import SSLWantReadError, SSLWantWriteError, SSLSocket
 
     WantRead = (BlockingIOError, InterruptedError, SSLWantReadError)
     WantWrite = (BlockingIOError, InterruptedError, SSLWantWriteError)
@@ -31,16 +33,115 @@ except ImportError:
     WantWrite = (BlockingIOError, InterruptedError)
 
 
-class AsyncSocket:
+class AsyncStream:
+    """
+    A generic asynchronous stream over
+    a file descriptor. Only works on Linux
+    & co because windows doesn't like select()
+    to be called on non-socket objects
+    (Thanks, Microsoft)
+    """
+
+    def __init__(self, fd: int, open_fd: bool = True, close_on_context_exit: bool = True, **kwargs):
+        self._fd = fd
+        self.stream = None
+        if open_fd:
+            self.stream = os.fdopen(self._fd, **kwargs)
+            os.set_blocking(self._fd, False)
+        self.close_on_context_exit = close_on_context_exit
+
+    async def read(self, size: int = -1):
+        """
+        Reads up to size bytes from the
+        given stream. If size == -1, read
+        until EOF is reached
+        """
+
+        while True:
+            try:
+                return self.stream.read(size)
+            except WantRead:
+                await want_read(self.stream)
+
+    async def write(self, data):
+        """
+        Writes data b to the file.
+        Returns the number of bytes
+        written
+        """
+
+        while True:
+            try:
+                return self.stream.write(data)
+            except WantWrite:
+                await want_write(self.stream)
+
+    async def close(self):
+        """
+        Closes the stream asynchronously
+        """
+
+        if self._fd == -1:
+            raise ResourceClosed("I/O operation on closed stream")
+        self._fd = -1
+        await notify_closing(self.stream)
+        await io_release(self.stream)
+        self.stream.close()
+        self.stream = None
+
+    @property
+    async def fileno(self):
+        """
+        Wrapper socket method
+        """
+
+        return self._fd
+
+    async def __aenter__(self):
+        self.stream.__enter__()
+        return self
+
+    async def __aexit__(self, *args):
+        if self._fd != -1 and self.close_on_context_exit:
+            await self.close()
+
+    async def dup(self):
+        """
+        Wrapper stream method
+        """
+
+        return type(self)(os.dup(self._fd))
+
+    def __repr__(self):
+        return f"AsyncStream({self.stream})"
+
+    def __del__(self):
+        """
+        Stream destructor. Do *not* call
+        this directly: stuff will break
+        """
+
+        if self._fd != -1:
+            try:
+                os.set_blocking(self._fd, False)
+                os.close(self._fd)
+            except OSError as e:
+                warnings.warn(f"An exception occurred in __del__ for stream {self} -> {type(e).__name__}: {e}")
+
+
+class AsyncSocket(AsyncStream):
     """
     Abstraction layer for asynchronous sockets
     """
 
-    def __init__(self, sock, do_handshake_on_connect: bool = True):
-        self.sock = sock
+    def __init__(self, sock: socket.socket, close_on_context_exit: bool = True, do_handshake_on_connect: bool = True):
+        super().__init__(sock.fileno(), open_fd=False, close_on_context_exit=close_on_context_exit)
         self.do_handshake_on_connect = do_handshake_on_connect
-        self._fd = sock.fileno()
-        self.sock.setblocking(False)
+        self.stream = socket.fromfd(self._fd, sock.family, sock.type, sock.proto)
+        self.stream.setblocking(False)
+        # A socket that isn't connected doesn't
+        # need to be closed
+        self.needs_closing: bool = False
 
     async def receive(self, max_size: int, flags: int = 0) -> bytes:
         """
@@ -52,11 +153,11 @@ class AsyncSocket:
             raise ResourceClosed("I/O operation on closed socket")
         while True:
             try:
-                return self.sock.recv(max_size, flags)
+                return self.stream.recv(max_size, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
 
     async def connect(self, address):
         """
@@ -67,12 +168,21 @@ class AsyncSocket:
             raise ResourceClosed("I/O operation on closed socket")
         while True:
             try:
-                self.sock.connect(address)
+                self.stream.connect(address)
                 if self.do_handshake_on_connect:
                     await self.do_handshake()
-                return
+                break
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
+        self.needs_closing = True
+
+    async def close(self):
+        """
+        Wrapper socket method
+        """
+
+        if self.needs_closing:
+            await super().close()
 
     async def accept(self):
         """
@@ -83,10 +193,10 @@ class AsyncSocket:
             raise ResourceClosed("I/O operation on closed socket")
         while True:
             try:
-                remote, addr = self.sock.accept()
+                remote, addr = self.stream.accept()
                 return type(self)(remote), addr
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def send_all(self, data: bytes, flags: int = 0):
         """
@@ -98,32 +208,20 @@ class AsyncSocket:
         sent_no = 0
         while data:
             try:
-                sent_no = self.sock.send(data, flags)
+                sent_no = self.stream.send(data, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
             data = data[sent_no:]
-
-    async def close(self):
-        """
-        Closes the socket asynchronously
-        """
-
-        if self._fd == -1:
-            raise ResourceClosed("I/O operation on closed socket")
-        await io_release(self.sock)
-        self.sock.close()
-        self._fd = -1
-        self.sock = None
 
     async def shutdown(self, how):
         """
         Wrapper socket method
         """
 
-        if self.sock:
-            self.sock.shutdown(how)
+        if self.stream:
+            self.stream.shutdown(how)
             await giambio.sleep(0)  # Checkpoint
 
     async def bind(self, addr: tuple):
@@ -136,7 +234,7 @@ class AsyncSocket:
 
         if self._fd == -1:
             raise ResourceClosed("I/O operation on closed socket")
-        self.sock.bind(addr)
+        self.stream.bind(addr)
 
     async def listen(self, backlog: int):
         """
@@ -148,26 +246,11 @@ class AsyncSocket:
 
         if self._fd == -1:
             raise ResourceClosed("I/O operation on closed socket")
-        self.sock.listen(backlog)
-
-    async def __aenter__(self):
-        self.sock.__enter__()
-        return self
-
-    async def __aexit__(self, *args):
-        if self.sock:
-            self.sock.__exit__(*args)
+        self.stream.listen(backlog)
 
     # Yes, I stole these from Curio because I could not be
     # arsed to write a bunch of uninteresting simple socket
     # methods from scratch, deal with it.
-
-    async def fileno(self):
-        """
-        Wrapper socket method
-        """
-
-        return self._fd
 
     async def settimeout(self, seconds):
         """
@@ -188,22 +271,23 @@ class AsyncSocket:
         Wrapper socket method
         """
 
-        return type(self)(self.sock.dup())
+        return type(self)(self.stream.dup(), self.do_handshake_on_connect)
 
     async def do_handshake(self):
         """
         Wrapper socket method
         """
 
-        if not hasattr(self.sock, "do_handshake"):
+        if not hasattr(self.stream, "do_handshake"):
             return
         while True:
             try:
-                return self.sock.do_handshake()
+                self.stream: SSLSocket  # Silences pycharm warnings
+                return self.stream.do_handshake()
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
 
     async def recvfrom(self, buffersize, flags=0):
         """
@@ -212,11 +296,11 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.recvfrom(buffersize, flags)
+                return self.stream.recvfrom(buffersize, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
 
     async def recvfrom_into(self, buffer, bytes=0, flags=0):
         """
@@ -225,11 +309,11 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.recvfrom_into(buffer, bytes, flags)
+                return self.stream.recvfrom_into(buffer, bytes, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
 
     async def sendto(self, bytes, flags_or_address, address=None):
         """
@@ -243,11 +327,11 @@ class AsyncSocket:
             flags = 0
         while True:
             try:
-                return self.sock.sendto(bytes, flags, address)
+                return self.stream.sendto(bytes, flags, address)
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def getpeername(self):
         """
@@ -256,11 +340,11 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.getpeername()
+                return self.stream.getpeername()
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def getsockname(self):
         """
@@ -269,11 +353,11 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.getpeername()
+                return self.stream.getpeername()
             except WantWrite:
-                await want_write(self.sock)
+                await want_write(self.stream)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def recvmsg(self, bufsize, ancbufsize=0, flags=0):
         """
@@ -282,9 +366,9 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.recvmsg(bufsize, ancbufsize, flags)
+                return self.stream.recvmsg(bufsize, ancbufsize, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def recvmsg_into(self, buffers, ancbufsize=0, flags=0):
         """
@@ -293,9 +377,9 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.recvmsg_into(buffers, ancbufsize, flags)
+                return self.stream.recvmsg_into(buffers, ancbufsize, flags)
             except WantRead:
-                await want_read(self.sock)
+                await want_read(self.stream)
 
     async def sendmsg(self, buffers, ancdata=(), flags=0, address=None):
         """
@@ -304,17 +388,13 @@ class AsyncSocket:
 
         while True:
             try:
-                return self.sock.sendmsg(buffers, ancdata, flags, address)
+                return self.stream.sendmsg(buffers, ancdata, flags, address)
             except WantRead:
-                await want_write(self.sock)
+                await want_write(self.stream)
 
     def __repr__(self):
-        return f"AsyncSocket({self.sock})"
+        return f"AsyncSocket({self.stream})"
 
     def __del__(self):
-        """
-        Socket destructor
-        """
-
-        if not self._fd != -1:
-            warnings.warn(f"socket '{self}' was destroyed, but was not closed, leading to a potential resource leak")
+        if self.needs_closing:
+            super().__del__()

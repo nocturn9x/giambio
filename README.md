@@ -16,6 +16,10 @@ rock-solid and structured concurrency framework (I personally recommend trio and
 that most of the content of this document is ~~stolen~~ inspired from its documentation)
 
 
+# Disclaimer #2
+
+This is a toy project. Don't try to use it in production, it *will* explode
+
 ## Goals of this project
 
 Making yet another async library might sound dumb in an already fragmented ecosystem like Python's.

@@ -15,7 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import functools
 # Import libraries and internal resources
 from numbers import Number
 from giambio.task import Task
@@ -33,6 +33,7 @@ from giambio.exceptions import (
     ResourceBusy,
     GiambioError,
     TooSlowError,
+    ResourceClosed
 )
 
 
@@ -433,12 +434,15 @@ class AsyncScheduler:
             task.result = ret.value
             task.finished = True
             self.join(task)
-            self.tasks.remove(task)
+        except CancelledError as cancel:
+            task.status = "cancelled"
+            task.cancel_pending = False
+            task.cancelled = True
+            self.join(task)
         except BaseException as err:
             task.exc = err
             self.join(task)
-            if task in self.tasks:
-                self.tasks.remove(task)
+
 
     def prune_deadlines(self):
         """
@@ -666,6 +670,8 @@ class AsyncScheduler:
                 self.io_release_task(task)
             if task in self.suspended:
                 self.suspended.remove(task)
+            if task in self.tasks:
+                self.tasks.remove(task)
             # If the pool (including any enclosing pools) has finished executing 
             # or we're at the first task that kicked the loop, we can safely 
             # reschedule the parent(s)
@@ -770,12 +776,24 @@ class AsyncScheduler:
                 task.cancelled = True
                 task.status = "cancelled"
                 self.debugger.after_cancel(task)
-                self.tasks.remove(task)
                 self.join(task)
             else:
                 # If the task ignores our exception, we'll
                 # raise it later again
                 task.cancel_pending = True
+
+    def notify_closing(self, stream):
+        """
+        Implements the notify_closing trap
+        """
+
+        if self.selector.get_map():
+            for k in filter(
+                lambda o: o.data == self.current_task,
+                dict(self.selector.get_map()).values(),
+            ):
+                self.handle_task_exit(k.data,
+                                      functools.partial(k.data.throw(ResourceClosed("stream has been closed"))))
 
     def register_sock(self, sock, evt_type: str):
         """
