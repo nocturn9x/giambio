@@ -43,7 +43,7 @@ class Event:
     async def trigger(self, value: Optional[Any] = None):
         """
         Sets the event, waking up all tasks that called
-        pause() on it
+        wait() on it
         """
 
         if self.set:

@@ -644,7 +644,6 @@ class AsyncScheduler:
         self.run_ready = deque()
         self.suspended = deque()
 
-
     def reschedule_joiners(self, task: Task):
         """
         Reschedules the parent(s) of the
